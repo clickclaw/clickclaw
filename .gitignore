@@ -1,0 +1,38 @@
+# 依赖
+node_modules/
+
+# 构建产物
+out/
+dist/
+*.tsbuildinfo
+
+# electron-vite 输出
+out/
+
+# 打包时下载的 Node.js 运行时和 openclaw（运行 package-resources.js 生成）
+resources/targets/
+
+# Node.js 下载缓存
+.cache/
+
+# 环境变量（签名密钥等敏感信息）
+.env
+.env.local
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+
+# claude
+
+.claude/settings.local.json
+
+
+# discuss
+
+discuss/

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 32 32" aria-label="ClickClaw Logo">
+  <!-- 白色圆角背景 -->
+  <rect width="32" height="32" rx="7" ry="7" fill="#ffffff"/>
+
+  <!-- ===== 原版龙虾（2倍放大，居中偏上） ===== -->
+  <!-- 原版16格，2倍=32px，偏移 x=2, y=1 让龙虾居中偏上给光标留位 -->
+
+  <!-- 轮廓（深棕） -->
+  <g fill="#3a0a0d">
+    <rect x="4"  y="11" width="2" height="6"/>
+    <rect x="6"  y="9"  width="2" height="2"/>
+    <rect x="6"  y="17" width="2" height="2"/>
+    <rect x="8"  y="7"  width="2" height="2"/>
+    <rect x="8"  y="19" width="2" height="2"/>
+    <rect x="10" y="5"  width="2" height="2"/>
+    <rect x="10" y="21" width="2" height="2"/>
+    <rect x="12" y="5"  width="12" height="2"/>
+    <rect x="24" y="5"  width="2" height="2"/>
+    <rect x="26" y="7"  width="2" height="2"/>
+    <rect x="26" y="19" width="2" height="2"/>
+    <rect x="28" y="9"  width="2" height="2"/>
+    <rect x="28" y="17" width="2" height="2"/>
+    <rect x="30" y="11" width="2" height="6"/>
+    <rect x="12" y="23" width="12" height="2"/>
+    <rect x="10" y="25" width="2" height="2"/>
+    <rect x="24" y="25" width="2" height="2"/>
+    <rect x="8"  y="27" width="2" height="2"/>
+    <rect x="26" y="27" width="2" height="2"/>
+    <rect x="12" y="29" width="12" height="2"/>
+  </g>
+
+  <!-- 身体（品牌橙红） -->
+  <g fill="#FF4D2A">
+    <rect x="12" y="7"  width="12" height="2"/>
+    <rect x="10" y="9"  width="16" height="2"/>
+    <rect x="8"  y="11" width="20" height="2"/>
+    <rect x="8"  y="13" width="20" height="2"/>
+    <rect x="8"  y="15" width="20" height="2"/>
+    <rect x="10" y="17" width="16" height="2"/>
+    <rect x="12" y="19" width="12" height="2"/>
+    <rect x="12" y="25" width="12" height="2"/>
+    <rect x="14" y="27" width="8"  height="2"/>
+  </g>
+
+  <!-- 钳子（浅橙） -->
+  <g fill="#FF7A5C">
+    <rect x="4"  y="13" width="4" height="2"/>
+    <rect x="6"  y="11" width="2" height="2"/>
+    <rect x="6"  y="15" width="2" height="2"/>
+    <rect x="28" y="13" width="4" height="2"/>
+    <rect x="28" y="11" width="2" height="2"/>
+    <rect x="28" y="15" width="2" height="2"/>
+  </g>
+
+  <!-- 眼睛高光 -->
+  <g fill="#f5fbff">
+    <rect x="14" y="9" width="2" height="2"/>
+    <rect x="20" y="9" width="2" height="2"/>
+  </g>
+  <!-- 眼睛瞳孔 -->
+  <g fill="#081016">
+    <rect x="14" y="11" width="2" height="2"/>
+    <rect x="20" y="11" width="2" height="2"/>
+  </g>
+
+  <!-- ===== 黑色像素光标（右下角） ===== -->
+  <g fill="#081016">
+    <!-- 箭头主体 -->
+    <rect x="19" y="19" width="2" height="2"/>
+    <rect x="19" y="21" width="2" height="2"/>
+    <rect x="19" y="23" width="2" height="2"/>
+    <rect x="19" y="25" width="2" height="2"/>
+    <rect x="19" y="27" width="2" height="2"/>
+    <rect x="19" y="29" width="2" height="2"/>
+    <!-- 箭头右展开 -->
+    <rect x="21" y="21" width="2" height="2"/>
+    <rect x="23" y="23" width="2" height="2"/>
+    <rect x="25" y="25" width="2" height="2"/>
+    <!-- 箭头底部回勾 -->
+    <rect x="21" y="27" width="2" height="2"/>
+    <rect x="23" y="27" width="2" height="2"/>
+    <rect x="23" y="29" width="2" height="2"/>
+    <rect x="25" y="29" width="2" height="2"/>
+    <rect x="25" y="27" width="2" height="2"/>
+    <rect x="27" y="27" width="2" height="2"/>
+  </g>
+</svg>

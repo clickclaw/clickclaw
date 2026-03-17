@@ -1,0 +1,4 @@
+# 开发模式下自动更新配置（仅用于本地测试，不会打包进产品）
+# electron-updater 在非 packaged 环境下会读取此文件
+provider: generic
+url: https://update.clickclaw.cn

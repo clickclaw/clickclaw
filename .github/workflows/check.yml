@@ -1,0 +1,40 @@
+name: CI 检查
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - 'dev/**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: TypeScript 编译检查
+        run: npm run build
+
+      - name: ESLint 检查
+        run: npm run lint
+
+      - name: Prettier 格式检查
+        run: npm run format:check
+
+      - name: i18n 完整性检查
+        run: npm run i18n:check
+
+      - name: 运行单元测试
+        run: npm test

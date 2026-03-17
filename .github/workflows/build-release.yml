@@ -1,0 +1,363 @@
+name: 构建并发布
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: '是否发布到 GitHub Releases'
+        type: boolean
+        default: false
+
+# 固定 openclaw 版本，升级时同步修改此处
+env:
+  OPENCLAW_PACKAGE_SOURCE: "2026.3.9"
+  ARTIFACT_RETENTION_DAYS: 7
+
+jobs:
+  # ─────────────────────────────────────────
+  # Windows x64
+  # ─────────────────────────────────────────
+  build-win-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 恢复资源缓存
+        id: cache-resources
+        uses: actions/cache@v4
+        with:
+          path: resources/targets/win32-x64
+          key: resources-win32-x64-openclaw-${{ env.OPENCLAW_PACKAGE_SOURCE }}-${{ hashFiles('package-lock.json') }}
+
+      # 让 npm run 内部的 execSync 也走 bash，避免 Windows cmd 路径问题
+      - name: 配置 npm script-shell 为 bash（Windows 专属）
+        run: npm config set script-shell "$(which bash)"
+
+      - name: 打包资源（下载 Node.js 22 + openclaw，缓存命中时跳过）
+        if: steps.cache-resources.outputs.cache-hit != 'true'
+        run: node scripts/package-resources.js --platform win32 --arch x64
+
+      - name: 构建 Windows x64 安装包
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run build
+          npx electron-builder --win --x64 --publish never
+
+      - name: 上传 dist 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-win-x64
+          path: |
+            dist/ClickClaw-Setup-*.exe
+            dist/latest.yml
+          if-no-files-found: error
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+  # ─────────────────────────────────────────
+  # Windows arm64
+  # ─────────────────────────────────────────
+  build-win-arm64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 恢复资源缓存
+        id: cache-resources
+        uses: actions/cache@v4
+        with:
+          path: resources/targets/win32-arm64
+          key: resources-win32-arm64-openclaw-${{ env.OPENCLAW_PACKAGE_SOURCE }}-${{ hashFiles('package-lock.json') }}
+
+      - name: 配置 npm script-shell 为 bash（Windows 专属）
+        run: npm config set script-shell "$(which bash)"
+
+      - name: 打包资源（下载 Node.js 22 + openclaw，缓存命中时跳过）
+        if: steps.cache-resources.outputs.cache-hit != 'true'
+        run: node scripts/package-resources.js --platform win32 --arch arm64
+
+      - name: 构建 Windows arm64 安装包
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run build
+          npx electron-builder --win --arm64 --publish never
+
+      - name: 上传 dist 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-win-arm64
+          path: |
+            dist/ClickClaw-Setup-*.exe
+            dist/latest.yml
+          if-no-files-found: error
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+  # ─────────────────────────────────────────
+  # macOS arm64
+  # ─────────────────────────────────────────
+  build-mac-arm64:
+    runs-on: macos-latest
+    env:
+      # 令所有 bash run 步骤启动时自动 source 此文件，统一设置 ulimit
+      BASH_ENV: /tmp/bash_setup.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 增加文件描述符限制（防止大量 npm install 触发 EMFILE）
+        run: echo "ulimit -n 65536" >> /tmp/bash_setup.sh
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 恢复资源缓存
+        id: cache-resources
+        uses: actions/cache@v4
+        with:
+          path: resources/targets/darwin-arm64
+          key: resources-darwin-arm64-openclaw-${{ env.OPENCLAW_PACKAGE_SOURCE }}-${{ hashFiles('package-lock.json') }}
+
+      - name: 打包资源（下载 Node.js 22 + openclaw，缓存命中时跳过）
+        if: steps.cache-resources.outputs.cache-hit != 'true'
+        run: node scripts/package-resources.js --platform darwin --arch arm64
+
+      - name: 构建 macOS arm64 安装包
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # macOS 签名（暂无证书，跳过）
+          # 购买 Apple Developer 账号后，在此处取消注释并配置 Secrets：
+          # CSC_LINK         - .p12 证书的 base64 编码
+          # CSC_KEY_PASSWORD - 证书密码
+          # CSC_NAME         - 签名身份名（Developer ID Application: ...）
+          # APPLE_API_KEY    - Apple API Key .p8 文件内容
+          # APPLE_API_KEY_ID - Apple API Key ID
+          # APPLE_API_ISSUER - Apple Team Issuer ID
+        run: |
+          npm run build
+          npx electron-builder --mac --arm64 --publish never
+
+      - name: 上传 dist 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-mac-arm64
+          path: |
+            dist/ClickClaw-*.dmg
+            dist/ClickClaw-*.zip
+            dist/latest-mac.yml
+          if-no-files-found: error
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+  # ─────────────────────────────────────────
+  # macOS x64
+  # ─────────────────────────────────────────
+  build-mac-x64:
+    runs-on: macos-latest
+    env:
+      BASH_ENV: /tmp/bash_setup.sh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 增加文件描述符限制（防止大量 npm install 触发 EMFILE）
+        run: echo "ulimit -n 65536" >> /tmp/bash_setup.sh
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 恢复资源缓存
+        id: cache-resources
+        uses: actions/cache@v4
+        with:
+          path: resources/targets/darwin-x64
+          key: resources-darwin-x64-openclaw-${{ env.OPENCLAW_PACKAGE_SOURCE }}-${{ hashFiles('package-lock.json') }}
+
+      - name: 打包资源（下载 Node.js 22 + openclaw，缓存命中时跳过）
+        if: steps.cache-resources.outputs.cache-hit != 'true'
+        run: node scripts/package-resources.js --platform darwin --arch x64
+
+      - name: 构建 macOS x64 安装包
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # macOS 签名（暂无证书，跳过）— 参见 build-mac-arm64 job 的注释
+        run: |
+          npm run build
+          npx electron-builder --mac --x64 --publish never
+
+      - name: 上传 dist 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-mac-x64
+          path: |
+            dist/ClickClaw-*.dmg
+            dist/ClickClaw-*.zip
+            dist/latest-mac.yml
+          if-no-files-found: error
+          retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
+
+  # ─────────────────────────────────────────
+  # 同时发布到 GitHub Releases + Cloudflare R2（S3 协议）
+  # tag push 或手动触发（publish=true）时运行
+  # ─────────────────────────────────────────
+  release:
+    needs: [build-win-x64, build-win-arm64, build-mac-arm64, build-mac-x64]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 读取 package.json 版本号
+        id: version
+        run: echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: 整理发布文件
+        run: |
+          mkdir -p release/final
+
+          # Windows 安装包（两个架构）
+          cp release/dist-win-x64/ClickClaw-Setup-*.exe   release/final/
+          cp release/dist-win-arm64/ClickClaw-Setup-*.exe  release/final/
+
+          # macOS 安装包（两个架构）
+          cp release/dist-mac-arm64/ClickClaw-*.dmg        release/final/
+          cp release/dist-mac-arm64/ClickClaw-*.zip        release/final/
+          cp release/dist-mac-x64/ClickClaw-*.dmg          release/final/
+          cp release/dist-mac-x64/ClickClaw-*.zip          release/final/
+
+          # 自动更新清单：Windows 取 x64，macOS 取 arm64
+          cp release/dist-win-x64/latest.yml               release/final/
+          cp release/dist-mac-arm64/latest-mac.yml         release/final/
+
+          echo "=== 待上传文件 ==="
+          ls -lh release/final/
+
+      - name: 重写 latest*.yml 下载路径（版本号/文件名）
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          # 可选：若设置该变量，则 latest 中写完整 URL；否则写相对路径（版本号/文件名）
+          # 例如: https://update.clickclaw.cn
+          R2_PUBLIC_BASE_URL: ${{ vars.R2_PUBLIC_BASE_URL }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const version = process.env.VERSION;
+          const baseUrl = (process.env.R2_PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+          const files = ['release/final/latest.yml', 'release/final/latest-mac.yml'];
+
+          function mapAssetUrl(raw) {
+            const v = raw.trim();
+            if (!v || /^https?:\/\//i.test(v)) return v;
+            const prefixed = `${version}/${v.replace(/^\/+/, '')}`;
+            return baseUrl ? `${baseUrl}/${prefixed}` : prefixed;
+          }
+
+          function rewriteYaml(content) {
+            const lines = content.split(/\r?\n/);
+            return lines
+              .map((line) => {
+                let m = line.match(/^(\s*url:\s*)(["']?)([^"']+)\2(\s*)$/);
+                if (m) return `${m[1]}${m[2]}${mapAssetUrl(m[3])}${m[2]}${m[4]}`;
+                m = line.match(/^(\s*path:\s*)(["']?)([^"']+)\2(\s*)$/);
+                if (m) return `${m[1]}${m[2]}${mapAssetUrl(m[3])}${m[2]}${m[4]}`;
+                return line;
+              })
+              .join('\n');
+          }
+
+          for (const file of files) {
+            if (!fs.existsSync(file)) throw new Error(`missing file: ${file}`);
+            const before = fs.readFileSync(file, 'utf8');
+            const after = rewriteYaml(before);
+            fs.writeFileSync(file, after);
+            console.log(`[rewrite] ${path.basename(file)} done`);
+          }
+          NODE
+
+      - name: 创建/更新 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}', steps.version.outputs.version) }}
+          name: "ClickClaw v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          files: release/final/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传安装包到 R2（先包后 latest）
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+          # 1) 先上传所有安装包到 版本号/ 目录
+          for f in release/final/ClickClaw-*; do
+            [ -f "$f" ] || continue
+            name="$(basename "$f")"
+            aws s3 cp "$f" "s3://${R2_BUCKET}/${VERSION}/${name}" --endpoint-url "$ENDPOINT"
+          done
+
+          # 2) 最后上传自动更新清单（上传即触发客户端看到新版本）
+          aws s3 cp release/final/latest.yml "s3://${R2_BUCKET}/latest.yml" --endpoint-url "$ENDPOINT"
+          aws s3 cp release/final/latest-mac.yml "s3://${R2_BUCKET}/latest-mac.yml" --endpoint-url "$ENDPOINT"
+
+      - name: 输出上传完成信息
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: |
+          echo "已上传到 R2 bucket: ${R2_BUCKET}"
+          echo "安装包目录: ${VERSION}/"
+          echo "更新清单: latest.yml / latest-mac.yml"

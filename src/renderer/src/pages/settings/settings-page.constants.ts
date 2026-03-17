@@ -1,0 +1,5 @@
+export const BRAND = '#FF4D2A'
+export const BRAND_LIGHT = 'rgba(255, 77, 42, 0.06)'
+export const BORDER = 'rgba(0, 0, 0, 0.07)'
+export const TEXT_PRIMARY = '#111'
+export const TEXT_MUTED = '#999'
