@@ -1,16 +1,15 @@
 /**
  * 系统托盘管理
  *
- * 方案：自定义弹出窗口（替代原生系统菜单）
- * - 左键点击托盘图标：直接显示/聚焦主窗口
- * - 右键点击托盘图标：弹出/关闭自定义 BrowserWindow 菜单
+ * 方案：
+ * - macOS：使用原生 Tray 菜单
+ * - Windows：右键点击托盘图标弹出自定义 BrowserWindow 菜单
  * - 弹窗失焦自动隐藏
- * - macOS：弹窗出现在菜单栏图标正下方
  * - Windows：弹窗出现在任务栏图标正上方
  * - 单例：弹窗创建一次后复用，不重复创建
  */
 
-import { Tray, BrowserWindow, nativeImage, screen } from 'electron'
+import { Tray, BrowserWindow, Menu, app, nativeImage, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { getGatewayProcess } from './gateway'
@@ -25,6 +24,79 @@ let tray: Tray | null = null
 let popup: BrowserWindow | null = null
 
 // ========== 弹窗创建 ==========
+
+function createMacTrayIcon() {
+  const iconPath = is.dev
+    ? join(__dirname, '../../assets/icon-256.png')
+    : join(process.resourcesPath, 'icon-256.png')
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 })
+  if (icon.isEmpty()) {
+    log.warn('mac tray icon load failed:', iconPath)
+  }
+  return icon
+}
+
+function createTrayIcon() {
+  if (process.platform === 'darwin') {
+    return createMacTrayIcon()
+  }
+
+  const iconPath = is.dev
+    ? join(__dirname, '../../assets/icon-256.png')
+    : join(process.resourcesPath, 'icon-256.png')
+  return nativeImage.createFromPath(iconPath)
+}
+
+function showMainWindow(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+function buildMacTrayMenu(win: BrowserWindow): Menu {
+  const gw = getGatewayProcess()
+  const state = gw.getState()
+  const busy = state === 'starting' || state === 'stopping'
+
+  return Menu.buildFromTemplate([
+    {
+      label: '显示 ClickClaw',
+      click: () => showMainWindow(win),
+    },
+    { type: 'separator' },
+    {
+      label: '启动 Gateway',
+      enabled: state === 'stopped',
+      click: () => {
+        gw.start().catch((err) => log.warn('tray start gateway failed:', err))
+      },
+    },
+    {
+      label: '重启 Gateway',
+      enabled: state === 'running',
+      click: () => {
+        gw.restart().catch((err) => log.warn('tray restart gateway failed:', err))
+      },
+    },
+    {
+      label: '停止 Gateway',
+      enabled: state === 'running',
+      click: () => {
+        gw.stop().catch((err) => log.warn('tray stop gateway failed:', err))
+      },
+    },
+    {
+      label: busy ? 'Gateway 状态切换中…' : `Gateway：${state}`,
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: '退出 ClickClaw',
+      click: () => app.quit(),
+    },
+  ])
+}
 
 function createPopupWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -115,27 +187,45 @@ function updateTooltip(state: string): void {
 export function createTray(win: BrowserWindow): void {
   if (tray) return
 
-  // 开发模式：从源码 assets/ 目录读取；打包模式：从 extraResources 注入的 resources/ 读取
-  const iconPath = is.dev
-    ? join(__dirname, '../../assets/icon-256.png')
-    : join(process.resourcesPath, 'icon-256.png')
-  const icon = nativeImage.createFromPath(iconPath)
+  const isMac = process.platform === 'darwin'
+  const icon = createTrayIcon()
   tray = new Tray(icon)
   tray.setToolTip('ClickClaw')
+
+  if (isMac) {
+    const syncMenu = (): void => {
+      if (!tray) return
+      tray.setContextMenu(buildMacTrayMenu(win))
+    }
+
+    syncMenu()
+    tray.on('click', () => {
+      if (!tray) return
+      tray.popUpContextMenu(buildMacTrayMenu(win))
+    })
+    tray.on('right-click', () => {
+      if (!tray) return
+      tray.popUpContextMenu(buildMacTrayMenu(win))
+    })
+
+    getGatewayProcess().addStateChangeListener((change) => {
+      updateTooltip(change.to)
+      syncMenu()
+    })
+
+    log.info('tray created (macOS native menu)')
+    return
+  }
 
   popup = createPopupWindow()
 
   // 左键点击：直接显示主窗口
   tray.on('click', () => {
-    if (win.isDestroyed()) return
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
-    // 如果弹窗正在显示，顺手关掉
+    showMainWindow(win)
     if (popup?.isVisible()) popup.hide()
   })
 
-  // 右键点击：弹出菜单（全平台统一）
+  // 右键点击：弹出菜单（Windows 使用自定义弹窗）
   tray.on('right-click', togglePopup)
 
   // 监听 Gateway 状态变化，更新 tooltip
@@ -143,7 +233,7 @@ export function createTray(win: BrowserWindow): void {
     updateTooltip(change.to)
   })
 
-  log.info('tray created (left-click=main, right-click=popup)')
+  log.info('tray created (windows custom popup)')
 }
 
 // ========== 销毁 ==========

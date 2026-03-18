@@ -148,8 +148,8 @@ export default function TitleBar(): React.ReactElement {
         } as ElectronStyle
       }
     >
-      {/* macOS 红绿灯占位（约 76px） */}
-      {isMac && <div style={{ width: 76, flexShrink: 0 }} />}
+      {/* macOS 红绿灯占位（增大间距，避免与 logo 过近） */}
+      {isMac && <div style={{ width: 96, flexShrink: 0 }} />}
 
       {/* Logo + 应用名 + Gateway 状态 */}
       <div
