@@ -269,9 +269,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 安装 js-yaml（merge 脚本依赖）
+        run: npm install js-yaml
+
       - name: 读取 package.json 版本号
         id: version
-        run: echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+        run: node -e "process.stdout.write('version=' + require('./package.json').version)" >> "$GITHUB_OUTPUT"
 
       - name: 下载所有构建产物
         uses: actions/download-artifact@v4
