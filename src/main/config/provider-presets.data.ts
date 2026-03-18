@@ -275,9 +275,30 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
         apiKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
         envKey: 'MINIMAX_CN_API_KEY',
         models: [
-          { id: 'minimax-m2.5', name: 'minimax-m2.5', input: ['text'] },
-          { id: 'minimax-m2.5-highspeed', name: 'minimax-m2.5-highspeed', input: ['text'] },
-          { id: 'minimax-m2.1', name: 'minimax-m2.1', input: ['text'] },
+          {
+            id: 'MiniMax-M2.7',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.7-highspeed',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5',
+            name: 'minimax-m2.5',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5-highspeed',
+            name: 'minimax-m2.5-highspeed',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
         ],
       },
       {
@@ -288,9 +309,30 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
         apiKeyUrl: 'https://platform.minimaxi.com/user-center/payment/coding-plan',
         envKey: 'MINIMAX_CN_CODE_API_KEY',
         models: [
-          { id: 'minimax-m2.5', name: 'minimax-m2.5', input: ['text'] },
-          { id: 'minimax-m2.5-highspeed', name: 'minimax-m2.5-highspeed', input: ['text'] },
-          { id: 'minimax-m2.1', name: 'minimax-m2.1', input: ['text'] },
+          {
+            id: 'MiniMax-M2.7',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.7-highspeed',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5',
+            name: 'minimax-m2.5',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5-highspeed',
+            name: 'minimax-m2.5-highspeed',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
         ],
       },
       {
@@ -301,9 +343,30 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
         apiKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
         envKey: 'MINIMAX_INTL_API_KEY',
         models: [
-          { id: 'minimax-m2.5', name: 'minimax-m2.5', input: ['text'] },
-          { id: 'minimax-m2.5-highspeed', name: 'minimax-m2.5-highspeed', input: ['text'] },
-          { id: 'minimax-m2.1', name: 'minimax-m2.1', input: ['text'] },
+          {
+            id: 'MiniMax-M2.7',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.7-highspeed',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5',
+            name: 'minimax-m2.5',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5-highspeed',
+            name: 'minimax-m2.5-highspeed',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
         ],
       },
       {
@@ -314,9 +377,30 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
         apiKeyUrl: 'https://platform.minimaxi.io/user-center/payment/coding-planan',
         envKey: 'MINIMAX_INTL_CODE_API_KEY',
         models: [
-          { id: 'minimax-m2.5', name: 'minimax-m2.5', input: ['text'] },
-          { id: 'minimax-m2.5-highspeed', name: 'minimax-m2.5-highspeed', input: ['text'] },
-          { id: 'minimax-m2.1', name: 'minimax-m2.1', input: ['text'] },
+          {
+            id: 'MiniMax-M2.7',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.7-highspeed',
+            name: 'MiniMax-M2.7',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5',
+            name: 'minimax-m2.5',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
+          {
+            id: 'MiniMax-M2.5-highspeed',
+            name: 'minimax-m2.5-highspeed',
+            input: ['text', 'image'],
+            contextWindow: 204800,
+          },
         ],
       },
     ],
