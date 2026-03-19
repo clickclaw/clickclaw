@@ -320,13 +320,21 @@ async function verifyQQBot(fields: Record<string, string>): Promise<ChannelVerif
  * 实际连通性与 token 匹配情况将在 Gateway/connector 启动后验证。
  */
 async function verifyDingTalk(fields: Record<string, string>): Promise<ChannelVerifyResult> {
-  const { clientId, clientSecret, gatewayToken } = fields
-  if (!clientId?.trim() || !clientSecret?.trim() || !gatewayToken?.trim()) {
+  const { clientId, clientSecret } = fields
+  if (!clientId?.trim() || !clientSecret?.trim()) {
     return { success: false, message: 'Client ID、Client Secret 和 Gateway Token 不能为空' }
   }
+  const res = await proxyFetch('https://api.dingtalk.com/v1.0/oauth2/accessToken', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ appKey: clientId.trim(), appSecret: clientSecret.trim() }),
+    signal: AbortSignal.timeout(15000),
+  })
+  if (res.ok) return { success: true }
+  const data = await res.json().catch(() => null)
   return {
-    success: true,
-    message: '凭证格式正确。钉钉连接器连通性将在 Gateway 启动后自动验证。',
+    success: false,
+    message: `钉钉返回 HTTP ${res.status}: ${data ? JSON.stringify(data).slice(0, 120) : '无响应体'}`,
   }
 }
 
@@ -359,24 +367,68 @@ async function verifyDiscord(fields: Record<string, string>): Promise<ChannelVer
 
 /**
  * Slack 预设同时暴露 Socket Mode 与 HTTP Events API 字段。
- * 当前验证按 mode 做最小必填校验，不主动请求 Slack API。
+ *
+ * 验证策略：
+ * - botToken：调用 auth.test
+ * - socket 模式 appToken：调用 apps.connections.open
+ * - http 模式 signingSecret：仅做非空校验，真实有效性需在接收回调时校验签名
  */
-async function verifySlack(fields: Record<string, string>): Promise<ChannelVerifyResult> {
+export async function verifySlack(fields: Record<string, string>): Promise<ChannelVerifyResult> {
   const mode = fields.mode?.trim() || 'socket'
   const botToken = fields.botToken?.trim()
   const appToken = fields.appToken?.trim()
   const signingSecret = fields.signingSecret?.trim()
 
   if (!botToken) return { success: false, message: 'Bot Token 不能为空' }
-  if (mode === 'socket' && !appToken) {
-    return { success: false, message: 'Socket Mode 需要填写 App Token' }
+
+  const authRes = await proxyFetch('https://slack.com/api/auth.test', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${botToken}` },
+    signal: AbortSignal.timeout(15000),
+  })
+  const authData = (await authRes.json().catch(() => null)) as {
+    ok?: boolean
+    error?: string
+  } | null
+  if (!authRes.ok || !authData?.ok) {
+    return {
+      success: false,
+      message: `Bot Token 无效: ${authData?.error ?? `HTTP ${authRes.status}`}`,
+    }
   }
-  if (mode === 'http' && !signingSecret) {
+
+  if (mode === 'socket') {
+    if (!appToken) {
+      return { success: false, message: 'Socket Mode 需要填写 App Token' }
+    }
+
+    const connRes = await proxyFetch('https://slack.com/api/apps.connections.open', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${appToken}` },
+      signal: AbortSignal.timeout(15000),
+    })
+    const connData = (await connRes.json().catch(() => null)) as {
+      ok?: boolean
+      error?: string
+      url?: string
+    } | null
+    if (!connRes.ok || !connData?.ok || !connData.url) {
+      return {
+        success: false,
+        message: `App Token 无效: ${connData?.error ?? `HTTP ${connRes.status}`}`,
+      }
+    }
+
+    return { success: true }
+  }
+
+  if (!signingSecret) {
     return { success: false, message: 'HTTP Events API 模式需要填写 Signing Secret' }
   }
+
   return {
     success: true,
-    message: '凭证格式正确。Slack 连通性将在 Gateway 启动后自动验证。',
+    message: 'Bot Token 有效。Signing Secret 将在接收 Slack 回调时完成签名校验。',
   }
 }
 
