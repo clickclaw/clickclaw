@@ -10,7 +10,7 @@ import type {
   DmPolicy,
   GroupPolicy,
 } from '../channels-page.types'
-import { configToForm, formToConfig } from '../channels-page.utils'
+import { configToForm, formToConfig, supportsGroupAllowFrom } from '../channels-page.utils'
 import { ChannelMonogram } from './ChannelMonogram'
 
 export function ChannelConfigDrawer({
@@ -276,7 +276,8 @@ export function ChannelConfigDrawer({
   }
 
   const hasDmAllowlist = watchedDmPolicy === 'allowlist'
-  const hasGroupAllowlist = watchedGroupPolicy === 'allowlist'
+  const hasGroupAllowlist =
+    watchedGroupPolicy === 'allowlist' && supportsGroupAllowFrom(preset)
   const scanHintStyle = {
     marginBottom: 8,
     fontSize: 12,

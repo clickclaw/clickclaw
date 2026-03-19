@@ -15,8 +15,6 @@ export function useModelPage() {
     setDefaultModel,
     loading,
     loadError,
-    needsRestart,
-    setNeedsRestart,
     loadData,
     touch,
   } = useProviderQuery()
@@ -96,8 +94,6 @@ export function useModelPage() {
     defaultModel,
     loading,
     loadError,
-    needsRestart,
-    setNeedsRestart,
     brandPickerOpen,
     setBrandPickerOpen,
     setupDrawerOpen,

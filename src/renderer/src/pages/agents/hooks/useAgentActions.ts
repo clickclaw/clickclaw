@@ -16,13 +16,11 @@ export function useAgentActions({ agents, loadAgents, setSelectedId }: UseAgentA
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [needsRestart, setNeedsRestart] = useState(false)
 
   const openCreateDrawer = useCallback(() => setDrawerOpen(true), [])
   const closeCreateDrawer = useCallback(() => {
     if (!creating) setDrawerOpen(false)
   }, [creating])
-  const dismissRestart = useCallback(() => setNeedsRestart(false), [])
 
   const handleSaveAgent = useCallback(
     async (updated: AgentConfig): Promise<void> => {
@@ -30,7 +28,6 @@ export function useAgentActions({ agents, loadAgents, setSelectedId }: UseAgentA
       if (updated.default && updated.id) {
         await window.api.agent.setDefault(updated.id)
       }
-      setNeedsRestart(true)
       await loadAgents()
     },
     [loadAgents]
@@ -47,7 +44,6 @@ export function useAgentActions({ agents, loadAgents, setSelectedId }: UseAgentA
         }
         message.success(t('agents.saveSuccess'))
         setDrawerOpen(false)
-        setNeedsRestart(true)
         if (saved.id) setSelectedId(saved.id)
         await loadAgents()
       } catch (err) {
@@ -66,7 +62,6 @@ export function useAgentActions({ agents, loadAgents, setSelectedId }: UseAgentA
       if (agent.id === 'main') return
       await window.api.agent.delete(agent.id)
       message.success(t('agents.deleteSuccess'))
-      setNeedsRestart(true)
       setSelectedId((prev) => {
         if (prev !== agent.id) return prev
         const remaining = agents.filter((a) => a.id !== agent.id)
@@ -81,7 +76,6 @@ export function useAgentActions({ agents, loadAgents, setSelectedId }: UseAgentA
     async (agent: AgentConfig): Promise<void> => {
       await window.api.agent.setDefault(agent.id)
       message.success(t('agents.setDefaultSuccess'))
-      setNeedsRestart(true)
       await loadAgents()
     },
     [loadAgents, message, t]
@@ -90,10 +84,8 @@ export function useAgentActions({ agents, loadAgents, setSelectedId }: UseAgentA
   return {
     drawerOpen,
     creating,
-    needsRestart,
     openCreateDrawer,
     closeCreateDrawer,
-    dismissRestart,
     handleSaveAgent,
     handleCreateAgent,
     handleDelete,

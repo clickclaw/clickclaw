@@ -1,7 +1,6 @@
 import { Button, Skeleton, Typography } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { RestartGatewayAlert } from '../../components/RestartGatewayAlert'
 import PageHeader from '../../components/PageHeader'
 import { AgentCreateDrawer } from './components/AgentCreateDrawer'
 import { AgentDetailPanel } from './components/AgentDetailPanel'
@@ -19,12 +18,10 @@ export default function AgentPage(): React.ReactElement {
     setSelectedId,
     drawerOpen,
     creating,
-    needsRestart,
     callRpc,
     wsReady,
     openCreateDrawer,
     closeCreateDrawer,
-    dismissRestart,
     handleSaveAgent,
     handleCreateAgent,
     handleDelete,
@@ -53,12 +50,6 @@ export default function AgentPage(): React.ReactElement {
           }
         />
       </div>
-
-      {needsRestart && (
-        <div style={{ flexShrink: 0 }}>
-          <RestartGatewayAlert show={needsRestart} onDismiss={dismissRestart} />
-        </div>
-      )}
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <div

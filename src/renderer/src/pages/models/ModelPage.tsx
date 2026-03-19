@@ -1,7 +1,6 @@
 import { Alert, Button, Skeleton } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { RestartGatewayAlert } from '../../components/RestartGatewayAlert'
 import PageHeader from '../../components/PageHeader'
 import { BrandPickerDrawer } from './components/BrandPickerDrawer'
 import { DefaultModelBanner } from './components/DefaultModelBanner'
@@ -21,8 +20,6 @@ export default function ModelPage(): React.ReactElement {
     defaultModel,
     loading,
     loadError,
-    needsRestart,
-    setNeedsRestart,
     brandPickerOpen,
     setBrandPickerOpen,
     setupDrawerOpen,
@@ -79,12 +76,6 @@ export default function ModelPage(): React.ReactElement {
       />
 
       <DefaultModelBanner defaultModel={defaultModel} brands={brands} />
-
-      <RestartGatewayAlert
-        show={needsRestart}
-        onDismiss={() => setNeedsRestart(false)}
-        style={{ marginBottom: 14 }}
-      />
 
       {loadError && (
         <Alert

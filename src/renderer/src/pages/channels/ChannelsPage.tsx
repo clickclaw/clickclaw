@@ -1,7 +1,6 @@
 import { Button, Skeleton } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { RestartGatewayAlert } from '../../components/RestartGatewayAlert'
 import PageHeader from '../../components/PageHeader'
 import { AccountConfigDrawer } from './components/AccountConfigDrawer'
 import { ChannelCard } from './components/ChannelCard'
@@ -25,8 +24,6 @@ export default function ChannelsPage(): React.ReactElement {
     selectedPreset,
     editingKey,
     saving,
-    needsRestart,
-    setNeedsRestart,
     accountDrawerOpen,
     setAccountDrawerOpen,
     accountChannelKey,
@@ -76,12 +73,6 @@ export default function ChannelsPage(): React.ReactElement {
             {t('channels.addChannel')}
           </Button>
         }
-      />
-
-      <RestartGatewayAlert
-        show={needsRestart}
-        onDismiss={() => setNeedsRestart(false)}
-        style={{ marginBottom: 14 }}
       />
 
       {loading ? (

@@ -8,7 +8,6 @@ export function useProviderQuery() {
   >(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [needsRestart, setNeedsRestart] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -37,7 +36,6 @@ export function useProviderQuery() {
   }, [loadData])
 
   const touch = useCallback(() => {
-    setNeedsRestart(true)
     loadData()
   }, [loadData])
 
@@ -47,8 +45,6 @@ export function useProviderQuery() {
     setDefaultModel,
     loading,
     loadError,
-    needsRestart,
-    setNeedsRestart,
     loadData,
     touch,
   }

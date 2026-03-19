@@ -19,6 +19,10 @@ const CHANNEL_META_KEYS = new Set([
 
 export const VIRTUAL_DEFAULT_ACCOUNT_ID = 'default'
 
+export function supportsGroupAllowFrom(preset: ChannelPresetForUI): boolean {
+  return preset.supportsGroup && preset.key !== 'discord'
+}
+
 export function areRequiredChannelFieldsFilled(
   values: Record<string, unknown>,
   preset: ChannelPresetForUI
@@ -123,12 +127,16 @@ export function resolveAccounts(
 }
 
 export function configToForm(config: ChannelConfig, preset: ChannelPresetForUI): ChannelFormValues {
+  const canUseGroupAllowFrom = supportsGroupAllowFrom(preset)
   const values: ChannelFormValues = {
     enabled: config.enabled !== false,
     dmPolicy: (config.dmPolicy as DmPolicy) ?? preset.dmPolicies[0] ?? 'pairing',
     allowFrom: Array.isArray(config.allowFrom) ? config.allowFrom.join('\n') : '',
     groupPolicy: (config.groupPolicy as GroupPolicy) ?? preset.groupPolicies[0] ?? 'allowlist',
-    groupAllowFrom: Array.isArray(config.groupAllowFrom) ? config.groupAllowFrom.join('\n') : '',
+    groupAllowFrom:
+      canUseGroupAllowFrom && Array.isArray(config.groupAllowFrom)
+        ? config.groupAllowFrom.join('\n')
+        : '',
   }
   for (const field of preset.fields) {
     const raw = config[field.key]
@@ -148,6 +156,7 @@ export function formToConfig(
   existing: ChannelConfig | undefined,
   preset: ChannelPresetForUI
 ): ChannelConfig {
+  const canUseGroupAllowFrom = supportsGroupAllowFrom(preset)
   const base: ChannelConfig = {
     ...(existing ?? {}),
     enabled: values.enabled !== false,
@@ -162,13 +171,18 @@ export function formToConfig(
               .filter(Boolean)
           : [],
     groupPolicy: values.groupPolicy ?? preset.groupPolicies[0],
-    groupAllowFrom:
+  }
+
+  if (canUseGroupAllowFrom) {
+    base.groupAllowFrom =
       typeof values.groupAllowFrom === 'string'
         ? values.groupAllowFrom
             .split('\n')
             .map((s) => s.trim())
             .filter(Boolean)
-        : [],
+        : []
+  } else {
+    delete base.groupAllowFrom
   }
 
   if (typeof values.streaming === 'boolean') {

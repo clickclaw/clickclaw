@@ -34,7 +34,6 @@ export function useChannelsPage() {
   const [selectedPreset, setSelectedPreset] = useState<ChannelPresetForUI | null>(null)
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [needsRestart, setNeedsRestart] = useState(false)
 
   const [accountDrawerOpen, setAccountDrawerOpen] = useState(false)
   const [accountChannelKey, setAccountChannelKey] = useState<string | null>(null)
@@ -113,7 +112,6 @@ export function useChannelsPage() {
         await window.api.channel.save(preset.key, config)
         message.success(t('channels.saveSuccess'))
         setConfigOpen(false)
-        setNeedsRestart(true)
         await load()
       } catch (err) {
         message.error(
@@ -131,7 +129,6 @@ export function useChannelsPage() {
       try {
         await window.api.channel.delete(key)
         message.success(t('channels.deleteSuccess'))
-        setNeedsRestart(true)
         await load()
       } catch (err) {
         message.error(String(err))
@@ -146,7 +143,6 @@ export function useChannelsPage() {
       if (!existing) return
       try {
         await window.api.channel.save(key, { ...existing, enabled })
-        setNeedsRestart(true)
         await load()
       } catch (err) {
         message.error(String(err))
@@ -246,7 +242,6 @@ export function useChannelsPage() {
 
         message.success(t('channels.accounts.saveSuccess'))
         setAccountDrawerOpen(false)
-        setNeedsRestart(true)
         await load()
       } catch (err) {
         message.error(
@@ -288,7 +283,6 @@ export function useChannelsPage() {
         }
 
         message.success(t('channels.accounts.deleteSuccess'))
-        setNeedsRestart(true)
         await load()
       } catch (err) {
         message.error(String(err))
@@ -302,7 +296,6 @@ export function useChannelsPage() {
       try {
         await window.api.channel.setDefaultAccount(channelKey, accountId)
         message.success(t('channels.accounts.setDefaultSuccess'))
-        setNeedsRestart(true)
         await load()
       } catch (err) {
         message.error(String(err))
@@ -319,7 +312,6 @@ export function useChannelsPage() {
         } else {
           await window.api.binding.delete(channelKey, accountId)
         }
-        setNeedsRestart(true)
         await load()
       } catch (err) {
         message.error(String(err))
@@ -341,8 +333,6 @@ export function useChannelsPage() {
     selectedPreset,
     editingKey,
     saving,
-    needsRestart,
-    setNeedsRestart,
     accountDrawerOpen,
     setAccountDrawerOpen,
     accountChannelKey,
