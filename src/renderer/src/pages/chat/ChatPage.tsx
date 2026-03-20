@@ -5,7 +5,19 @@
  */
 
 import { Bubble, Sender, Welcome, Attachments } from '@ant-design/x'
-import { App, Button, Divider, Dropdown, Flex, GetRef, Spin, Typography, Layout, theme } from 'antd'
+import {
+  App,
+  Button,
+  Divider,
+  Dropdown,
+  Flex,
+  GetRef,
+  Spin,
+  Switch,
+  Typography,
+  Layout,
+  theme,
+} from 'antd'
 import {
   DownOutlined,
   PlayCircleOutlined,
@@ -27,6 +39,7 @@ import { useChatCommands } from './hooks/useChatCommands'
 import { useChatComposer } from './hooks/useChatComposer'
 import { useChatConnectionUi } from './hooks/useChatConnectionUi'
 import { useChatModelSwitcher } from './hooks/useChatModelSwitcher'
+import { useChatDisplayPrefs } from './hooks/useChatDisplayPrefs'
 import { useChatPrompts } from './hooks/useChatPrompts'
 import { useChatSessions } from './hooks/useChatSessions'
 import { useSlashCommandMenu } from './hooks/useSlashCommandMenu'
@@ -62,11 +75,7 @@ function ChatPage(): React.ReactElement {
     callRpc,
   } = useGatewayContext()
 
-  const {
-    handleOpenNewSession,
-    handleDeleteSession,
-    handleResetSession,
-  } = useChatSessions({
+  const { handleOpenNewSession, handleDeleteSession, handleResetSession } = useChatSessions({
     defaultAgentId,
     sessions,
     newSession,
@@ -109,18 +118,27 @@ function ChatPage(): React.ReactElement {
     callRpc,
     onSwitched: (model) => {
       msg.success(
-        model
-          ? t('chat.model.switchSuccess', { model })
-          : t('chat.model.switchDefaultSuccess')
+        model ? t('chat.model.switchSuccess', { model }) : t('chat.model.switchDefaultSuccess')
       )
     },
   })
 
   const quickPrompts = useChatPrompts(t)
   const slashCommands = useChatCommands(t)
+  const {
+    showThinking,
+    setShowThinking,
+    showToolCalls,
+    setShowToolCalls,
+    showUsage,
+    setShowUsage,
+  } = useChatDisplayPrefs()
   const { bubbleItems, bubbleRoles } = useChatBubbles({
     messages,
     tokenColorTextSecondary: token.colorTextSecondary,
+    showThinking,
+    showToolCalls,
+    showUsage,
     onCopied: () => msg.success(t('common.copied')),
   })
   const slashMenu = useSlashCommandMenu({
@@ -376,7 +394,9 @@ function ChatPage(): React.ReactElement {
                 disabled={status !== 'ready'}
                 loading={isStreaming}
                 placeholder={
-                  status !== 'ready' ? t('chat.sender.waitingGateway') : t('chat.sender.placeholder')
+                  status !== 'ready'
+                    ? t('chat.sender.waitingGateway')
+                    : t('chat.sender.placeholder')
                 }
                 onSubmit={handleSend}
                 onCancel={abortMessage}
@@ -459,6 +479,31 @@ function ChatPage(): React.ReactElement {
                       >
                         {sessionKey || t('chat.model.noSession')}
                       </span>
+                      <Divider type="vertical" style={{ margin: 0 }} />
+                      <Flex align="center" gap={6} wrap="wrap">
+                        <Flex align="center" gap={4}>
+                          <Switch size="small" checked={showThinking} onChange={setShowThinking} />
+                          <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                            {t('chat.display.thinking')}
+                          </span>
+                        </Flex>
+                        <Flex align="center" gap={4}>
+                          <Switch
+                            size="small"
+                            checked={showToolCalls}
+                            onChange={setShowToolCalls}
+                          />
+                          <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                            {t('chat.display.tools')}
+                          </span>
+                        </Flex>
+                        <Flex align="center" gap={4}>
+                          <Switch size="small" checked={showUsage} onChange={setShowUsage} />
+                          <span style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                            {t('chat.display.usage')}
+                          </span>
+                        </Flex>
+                      </Flex>
                     </Flex>
                     <Flex align="center" gap={8} flex="none">
                       <Divider type="vertical" style={{ margin: 0 }} />

@@ -286,6 +286,11 @@
       "switchFailed": "Failed to switch model: {{error}}",
       "noSession": "No session selected"
     },
+    "display": {
+      "thinking": "Thinking",
+      "tools": "Tools",
+      "usage": "Usage"
+    },
     "sender": {
       "placeholder": "Send a message (Enter to send, Shift+Enter for a new line)",
       "waitingGateway": "Waiting for Gateway...",

@@ -288,6 +288,11 @@
       "switchFailed": "切换模型失败：{{error}}",
       "noSession": "未选择会话"
     },
+    "display": {
+      "thinking": "思考",
+      "tools": "工具",
+      "usage": "用量"
+    },
     "sender": {
       "placeholder": "发送消息（Enter 发送，Shift+Enter 换行）",
       "waitingGateway": "等待 Gateway 启动...",

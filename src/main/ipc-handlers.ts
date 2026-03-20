@@ -867,6 +867,23 @@ export function registerIpcHandlers(): void {
     }
   })
 
+  // 渲染进程调试日志（统一写入 clickclaw.log，便于排查前端事件流）
+  ipcMain.handle(
+    'log:write',
+    (
+      _event,
+      entry: { level?: 'info' | 'warn' | 'error' | 'debug'; tag?: string; message: string }
+    ) => {
+      const level = entry?.level || 'info'
+      const tag = entry?.tag ? `[${entry.tag}] ` : ''
+      const message = `${tag}${entry?.message || ''}`
+      if (level === 'warn') log.warn(message)
+      else if (level === 'error') log.error(message)
+      else if (level === 'debug') log.debug(message)
+      else log.info(message)
+    }
+  )
+
   // ========== Backup ==========
 
   // 列出所有快照

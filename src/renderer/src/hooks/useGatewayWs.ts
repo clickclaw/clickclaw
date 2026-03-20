@@ -26,16 +26,38 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 
 export type WsStatus = 'disconnected' | 'connecting' | 'handshaking' | 'ready' | 'error'
 
+export interface ChatUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+}
+
+export interface ChatToolCall {
+  id: string
+  name: string
+  argumentsText?: string
+  resultText?: string
+  status: 'loading' | 'success' | 'error'
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  /** 思考内容（assistant） */
+  thinking?: string
+  /** 工具调用链（assistant） */
+  toolCalls?: ChatToolCall[]
   /** 流式状态（仅 assistant 消息有效） */
   streaming?: boolean
   /** token 消耗 */
-  usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
+  usage?: ChatUsage
   /** 耗时 ms */
   durationMs?: number
+  /** 当前回答模型 */
+  model?: string
+  /** 当前回答提供方 */
+  provider?: string
   /** 附件（用户消息） */
   attachments?: AttachmentPayload[]
 }
@@ -59,9 +81,11 @@ export interface ChatEventPayload {
   state: 'delta' | 'final' | 'aborted' | 'error'
   sessionKey: string
   runId: string
-  message?: { content: string | ContentBlock[] }
-  usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
+  message?: { content: string | ContentBlock[]; model?: string; provider?: string }
+  usage?: unknown
   durationMs?: number
+  model?: string
+  provider?: string
   errorMessage?: string
   error?: { message: string; code?: string }
 }
@@ -69,6 +93,13 @@ export interface ChatEventPayload {
 interface ContentBlock {
   type: string
   text?: string
+  thinking?: string
+  id?: string
+  name?: string
+  arguments?: unknown
+  toolCallId?: string
+  content?: unknown
+  isError?: boolean
 }
 
 interface WsFrame {
@@ -82,11 +113,41 @@ interface WsFrame {
   event?: string
 }
 
+interface RealtimeMessagePayload {
+  id?: string
+  role?: string
+  content?: string | ContentBlock[]
+  sessionKey?: string
+  toolCallId?: string
+  toolName?: string
+  stopReason?: string
+  isError?: boolean
+  usage?: unknown
+  durationMs?: number
+  model?: string
+  provider?: string
+}
+
+interface AgentToolEventPayload {
+  runId?: string
+  sessionKey?: string
+  stream?: string
+  data?: {
+    toolCallId?: string
+    name?: string
+    phase?: string
+    args?: unknown
+    partialResult?: unknown
+    result?: unknown
+  }
+}
+
 // ========== 常量 ==========
 
 const CHALLENGE_TIMEOUT_MS = 5000
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000]
 const PING_INTERVAL_MS = 25000
+const DEBUG_LOG_MAX_LEN = 30_000
 
 let _reqSeq = 0
 function nextId(prefix = 'req'): string {
@@ -101,6 +162,154 @@ function extractText(content: string | ContentBlock[] | undefined): string {
     .filter((b) => b.type === 'text' && b.text)
     .map((b) => b.text!)
     .join('')
+}
+
+function extractToolResultText(content: unknown): string | undefined {
+  if (!content) return undefined
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return undefined
+  const text = content
+    .map((item) => {
+      const block = item as ContentBlock
+      if (block.type === 'text' && typeof block.text === 'string') return block.text
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+  return text || undefined
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number(value)
+    if (Number.isFinite(n)) return n
+  }
+  return undefined
+}
+
+function normalizeUsage(usage: unknown): ChatUsage | undefined {
+  if (!usage || typeof usage !== 'object') return undefined
+  const data = usage as Record<string, unknown>
+  const inputTokens = toNumber(data.input_tokens ?? data.input) ?? 0
+  const outputTokens = toNumber(data.output_tokens ?? data.output) ?? 0
+  const totalTokens =
+    toNumber(data.total_tokens ?? data.totalTokens ?? data.total) ?? inputTokens + outputTokens
+  if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0) return undefined
+  return { inputTokens, outputTokens, totalTokens }
+}
+
+function pickText(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value
+  }
+  return undefined
+}
+
+function toJsonText(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function stringifyForDebugLog(value: unknown, maxLen = DEBUG_LOG_MAX_LEN): string {
+  const seen = new WeakSet<object>()
+  const json = JSON.stringify(
+    value,
+    (_key, val) => {
+      if (typeof val === 'bigint') return String(val)
+      if (typeof val === 'function') return '[Function]'
+      if (val && typeof val === 'object') {
+        if (seen.has(val)) return '[Circular]'
+        seen.add(val)
+      }
+      return val
+    },
+    2
+  )
+  if (!json) return ''
+  if (json.length <= maxLen) return json
+  return `${json.slice(0, maxLen)}...<truncated ${json.length - maxLen} chars>`
+}
+
+function normalizeAssistantContent(content: string | ContentBlock[] | undefined): {
+  text: string
+  thinking?: string
+  toolCalls?: ChatToolCall[]
+} {
+  if (!content) return { text: '' }
+  if (typeof content === 'string') return { text: content }
+
+  const textParts: string[] = []
+  const thinkingParts: string[] = []
+  const toolCalls: ChatToolCall[] = []
+
+  for (const block of content) {
+    if (block.type === 'text' && block.text) {
+      textParts.push(block.text)
+      continue
+    }
+    if (block.type === 'thinking' && block.thinking) {
+      thinkingParts.push(block.thinking)
+      continue
+    }
+    if (block.type === 'toolCall') {
+      const id = pickText(block.id) || nextId('tool')
+      const name = pickText(block.name) || 'tool'
+      toolCalls.push({
+        id,
+        name,
+        argumentsText: toJsonText(block.arguments),
+        status: 'loading',
+      })
+      continue
+    }
+    if (block.type === 'toolResult') {
+      const targetId = pickText(block.toolCallId, block.id)
+      if (!targetId) continue
+      const idx = toolCalls.findIndex((t) => t.id === targetId)
+      if (idx < 0) continue
+      toolCalls[idx] = {
+        ...toolCalls[idx],
+        resultText: extractToolResultText(block.content),
+        status: block.isError ? 'error' : 'success',
+      }
+    }
+  }
+
+  return {
+    text: textParts.join(''),
+    thinking: thinkingParts.length > 0 ? thinkingParts.join('\n\n') : undefined,
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+  }
+}
+
+function mergeToolCalls(
+  base: ChatToolCall[] | undefined,
+  incoming: ChatToolCall[] | undefined
+): ChatToolCall[] | undefined {
+  if (!base?.length) return incoming
+  if (!incoming?.length) return base
+  const next = [...base]
+  for (const tool of incoming) {
+    const idx = next.findIndex((item) => item.id === tool.id)
+    if (idx < 0) {
+      next.push(tool)
+      continue
+    }
+    next[idx] = {
+      ...next[idx],
+      ...tool,
+      argumentsText: tool.argumentsText ?? next[idx].argumentsText,
+      resultText: tool.resultText ?? next[idx].resultText,
+    }
+  }
+  return next
 }
 
 /** 从 sessionKey 解析显示名称（格式：agent:<agentId>:<channelName>） */
@@ -213,6 +422,13 @@ export function useGatewayWs(): UseGatewayWsReturn {
   /** 最近浏览过的会话历史缓存，减少切换闪白 */
   const messageCacheRef = useRef<Map<string, ChatMessage[]>>(new Map())
 
+  const writeDebugLog = useCallback((message: string, data?: unknown): void => {
+    const suffix = data === undefined ? '' : ` | ${stringifyForDebugLog(data)}`
+    window.api.log
+      .write({ level: 'debug', tag: 'chat-debug', message: `${message}${suffix}` })
+      .catch(() => {})
+  }, [])
+
   const loadGatewayAuthContext = useCallback(async (): Promise<void> => {
     const [token, deviceId] = await Promise.all([
       window.api.gateway.getToken(),
@@ -309,32 +525,141 @@ export function useGatewayWs(): UseGatewayWsReturn {
   }, [rpc])
 
   const loadHistory = useCallback(
-    (key: string): void => {
-      setHistoryLoading(true)
+    (key: string, options?: { silent?: boolean }): void => {
+      const silent = options?.silent === true
+      if (!silent) setHistoryLoading(true)
       rpc('chat.history', { sessionKey: key, limit: 200 })
         .then((result) => {
           const data = result as { messages?: unknown[] } | null
           const rawMessages: unknown[] = data?.messages || []
-          const loaded: ChatMessage[] = rawMessages
-            .map((m) => {
-              const msg = m as {
-                id?: string
-                role?: string
-                content?: string | ContentBlock[]
-                timestamp?: number
-                attachments?: AttachmentPayload[]
+          const loaded: ChatMessage[] = []
+          const toolMap = new Map<string, { messageIndex: number; toolIndex: number }>()
+
+          for (const entry of rawMessages) {
+            const msg = entry as {
+              id?: string
+              role?: string
+              content?: string | ContentBlock[]
+              timestamp?: number
+              attachments?: AttachmentPayload[]
+              usage?: unknown
+              durationMs?: number
+              model?: string
+              provider?: string
+              toolCallId?: string
+              toolName?: string
+              isError?: boolean
+            }
+
+            if (msg.role === 'assistant') {
+              const normalized = normalizeAssistantContent(msg.content)
+              if (
+                !normalized.text &&
+                !normalized.thinking &&
+                !normalized.toolCalls?.length &&
+                !msg.attachments?.length
+              ) {
+                continue
               }
-              if (msg.role !== 'user' && msg.role !== 'assistant') return null
-              const text = extractText(msg.content as string | ContentBlock[] | undefined)
-              if (!text && !msg.attachments?.length) return null
-              return {
+
+              const prev = loaded[loaded.length - 1]
+              const prevIsAssistant = prev?.role === 'assistant'
+              const prevHasText = Boolean(prevIsAssistant && prev.content?.trim())
+              const incomingHasText = Boolean(normalized.text?.trim())
+              const prevHasMeta = Boolean(
+                prevIsAssistant &&
+                (prev.thinking?.trim() || prev.toolCalls?.length || prev.attachments?.length)
+              )
+              const incomingHasMeta = Boolean(
+                normalized.thinking?.trim() ||
+                normalized.toolCalls?.length ||
+                msg.attachments?.length
+              )
+
+              // 历史里同一轮 assistant 可能被拆成多段（工具段 + 正文段），这里合并为一个气泡
+              const shouldMergeWithPrev =
+                prevIsAssistant &&
+                ((!prevHasText && prevHasMeta && incomingHasText) ||
+                  (prevHasText && !incomingHasText && incomingHasMeta) ||
+                  (!prevHasText && !incomingHasText))
+
+              if (shouldMergeWithPrev && prevIsAssistant) {
+                prev.content = incomingHasText ? normalized.text : prev.content
+                if (normalized.thinking) {
+                  prev.thinking = prev.thinking
+                    ? prev.thinking.includes(normalized.thinking)
+                      ? prev.thinking
+                      : `${prev.thinking}\n\n${normalized.thinking}`
+                    : normalized.thinking
+                }
+                prev.toolCalls = mergeToolCalls(prev.toolCalls, normalized.toolCalls)
+                if (msg.attachments?.length) {
+                  prev.attachments = [...(prev.attachments || []), ...msg.attachments]
+                }
+                prev.usage = normalizeUsage(msg.usage) ?? prev.usage
+                prev.durationMs = toNumber(msg.durationMs) ?? prev.durationMs
+                prev.model = pickText(msg.model, prev.model) ?? prev.model
+                prev.provider = pickText(msg.provider, prev.provider) ?? prev.provider
+
+                const messageIndex = loaded.length - 1
+                prev.toolCalls?.forEach((toolCall, toolIndex) => {
+                  toolMap.set(toolCall.id, { messageIndex, toolIndex })
+                })
+                continue
+              }
+
+              const message: ChatMessage = {
                 id: msg.id || nextId('hist'),
-                role: msg.role as 'user' | 'assistant',
+                role: 'assistant',
+                content: normalized.text,
+                thinking: normalized.thinking,
+                toolCalls: normalized.toolCalls,
+                attachments: msg.attachments,
+                usage: normalizeUsage(msg.usage),
+                durationMs: toNumber(msg.durationMs),
+                model: pickText(msg.model),
+                provider: pickText(msg.provider),
+              }
+              const messageIndex = loaded.push(message) - 1
+              normalized.toolCalls?.forEach((toolCall, toolIndex) => {
+                toolMap.set(toolCall.id, { messageIndex, toolIndex })
+              })
+              continue
+            }
+
+            if (msg.role === 'toolResult') {
+              const toolCallId = pickText(msg.toolCallId)
+              const link = toolCallId ? toolMap.get(toolCallId) : undefined
+              if (!link) continue
+              const target = loaded[link.messageIndex]
+              if (!target?.toolCalls?.[link.toolIndex]) continue
+              const nextToolCalls = [...target.toolCalls]
+              const current = nextToolCalls[link.toolIndex]
+              nextToolCalls[link.toolIndex] = {
+                ...current,
+                name: pickText(current.name, msg.toolName) || current.name,
+                resultText: extractToolResultText(msg.content),
+                status: msg.isError ? 'error' : 'success',
+              }
+              target.toolCalls = nextToolCalls
+              continue
+            }
+
+            if (msg.role === 'user') {
+              const text = extractText(msg.content as string | ContentBlock[] | undefined)
+              if (!text && !msg.attachments?.length) continue
+              loaded.push({
+                id: msg.id || nextId('hist'),
+                role: 'user',
                 content: text,
                 attachments: msg.attachments,
-              } as ChatMessage
-            })
-            .filter((m): m is ChatMessage => m !== null)
+                usage: normalizeUsage(msg.usage),
+                durationMs: toNumber(msg.durationMs),
+                model: pickText(msg.model),
+                provider: pickText(msg.provider),
+              })
+            }
+          }
           messageCacheRef.current.set(key, loaded)
           if (sessionKeyRef.current === key) {
             setMessages(loaded)
@@ -342,7 +667,7 @@ export function useGatewayWs(): UseGatewayWsReturn {
         })
         .catch(() => {})
         .finally(() => {
-          if (sessionKeyRef.current === key) {
+          if (!silent && sessionKeyRef.current === key) {
             setHistoryLoading(false)
           }
         })
@@ -450,17 +775,40 @@ export function useGatewayWs(): UseGatewayWsReturn {
 
   const handleChatEvent = useCallback(
     (payload: ChatEventPayload): void => {
-      const text = extractText(payload.message?.content)
+      const normalized = normalizeAssistantContent(payload.message?.content)
+      const model = pickText(payload.model, payload.message?.model)
+      const provider = pickText(payload.provider, payload.message?.provider)
+      const usage = normalizeUsage(payload.usage)
+      const durationMs = toNumber(payload.durationMs)
+      writeDebugLog(`chat-event state=${payload.state} runId=${payload.runId}`, {
+        payload,
+        normalized: {
+          textLength: normalized.text.length,
+          thinking: Boolean(normalized.thinking),
+          tools: normalized.toolCalls?.length || 0,
+        },
+      })
 
       if (payload.state === 'delta') {
         currentRunIdRef.current = payload.runId
         setIsStreaming(true)
         setMessages((prev) => {
-          // 找到当前 streaming 的 assistant 消息并更新
-          const idx = prev.findIndex((m) => m.role === 'assistant' && m.streaming)
+          // 优先按 runId 命中，避免 lifecycle 抢先结束后产生重复气泡
+          const idxByRunId = prev.findIndex((m) => m.role === 'assistant' && m.id === payload.runId)
+          const idxStreaming =
+            idxByRunId >= 0 ? -1 : prev.findIndex((m) => m.role === 'assistant' && m.streaming)
+          const idx = idxByRunId >= 0 ? idxByRunId : idxStreaming
           if (idx >= 0) {
             const updated = [...prev]
-            updated[idx] = { ...updated[idx], content: text }
+            updated[idx] = {
+              ...updated[idx],
+              id: payload.runId || updated[idx].id,
+              content: normalized.text,
+              thinking: normalized.thinking ?? updated[idx].thinking,
+              toolCalls: normalized.toolCalls ?? updated[idx].toolCalls,
+              model,
+              provider,
+            }
             return updated
           }
           // 新建 streaming 气泡
@@ -469,24 +817,37 @@ export function useGatewayWs(): UseGatewayWsReturn {
             {
               id: payload.runId,
               role: 'assistant',
-              content: text,
+              content: normalized.text,
+              thinking: normalized.thinking,
+              toolCalls: normalized.toolCalls,
               streaming: true,
+              model,
+              provider,
             },
           ]
         })
       } else if (payload.state === 'final') {
         currentRunIdRef.current = null
         setIsStreaming(false)
+        const currentSessionKey = payload.sessionKey || sessionKeyRef.current || ''
         setMessages((prev) => {
-          const idx = prev.findIndex((m) => m.role === 'assistant' && m.streaming)
+          const idxByRunId = prev.findIndex((m) => m.role === 'assistant' && m.id === payload.runId)
+          const idxStreaming =
+            idxByRunId >= 0 ? -1 : prev.findIndex((m) => m.role === 'assistant' && m.streaming)
+          const idx = idxByRunId >= 0 ? idxByRunId : idxStreaming
           if (idx >= 0) {
             const updated = [...prev]
             updated[idx] = {
               ...updated[idx],
-              content: text,
+              id: payload.runId || updated[idx].id,
+              content: normalized.text,
+              thinking: normalized.thinking ?? updated[idx].thinking,
+              toolCalls: normalized.toolCalls ?? updated[idx].toolCalls,
               streaming: false,
-              usage: payload.usage,
-              durationMs: payload.durationMs,
+              usage,
+              durationMs,
+              model,
+              provider,
             }
             return updated
           }
@@ -494,12 +855,20 @@ export function useGatewayWs(): UseGatewayWsReturn {
         })
         // 消息完成后刷新会话列表（更新时间戳排序）
         setTimeout(refreshSessions, 500)
+        // realtime 帧可能不带 thinking/usage，静默回读 history 补齐元信息
+        if (currentSessionKey) {
+          setTimeout(() => {
+            if (sessionKeyRef.current === currentSessionKey) {
+              loadHistory(currentSessionKey, { silent: true })
+            }
+          }, 350)
+        }
       } else if (payload.state === 'aborted') {
         currentRunIdRef.current = null
         setIsStreaming(false)
         setMessages((prev) =>
           prev.map((m) =>
-            m.streaming ? { ...m, content: text || m.content, streaming: false } : m
+            m.streaming ? { ...m, content: normalized.text || m.content, streaming: false } : m
           )
         )
       } else if (payload.state === 'error') {
@@ -511,7 +880,194 @@ export function useGatewayWs(): UseGatewayWsReturn {
         )
       }
     },
-    [refreshSessions]
+    [loadHistory, refreshSessions, writeDebugLog]
+  )
+
+  const handleRealtimeMessageEvent = useCallback(
+    (messagePayload: RealtimeMessagePayload, containerPayload?: Record<string, unknown>): void => {
+      const targetSessionKey = pickText(messagePayload.sessionKey, containerPayload?.sessionKey)
+      if (targetSessionKey && sessionKeyRef.current && targetSessionKey !== sessionKeyRef.current) {
+        return
+      }
+
+      if (messagePayload.role === 'assistant') {
+        const normalized = normalizeAssistantContent(messagePayload.content)
+        const model = pickText(messagePayload.model, containerPayload?.model)
+        const provider = pickText(messagePayload.provider, containerPayload?.provider)
+        const usage = normalizeUsage(messagePayload.usage ?? containerPayload?.usage)
+        const durationMs = toNumber(messagePayload.durationMs ?? containerPayload?.durationMs)
+        const isToolStep = /tooluse/i.test(pickText(messagePayload.stopReason) || '')
+        writeDebugLog(
+          `realtime-assistant id=${messagePayload.id || '-'} stop=${messagePayload.stopReason || '-'}`,
+          {
+            messagePayload,
+            containerPayload,
+            normalized: {
+              textLength: normalized.text.length,
+              thinking: Boolean(normalized.thinking),
+              tools: normalized.toolCalls?.length || 0,
+            },
+          }
+        )
+
+        setMessages((prev) => {
+          const idxById = messagePayload.id
+            ? prev.findIndex((m) => m.role === 'assistant' && m.id === messagePayload.id)
+            : -1
+          const idxStreaming =
+            idxById >= 0 ? -1 : prev.findIndex((m) => m.role === 'assistant' && m.streaming)
+          const idx = idxById >= 0 ? idxById : idxStreaming
+
+          if (idx >= 0) {
+            const updated = [...prev]
+            updated[idx] = {
+              ...updated[idx],
+              id: messagePayload.id || updated[idx].id,
+              content: normalized.text || updated[idx].content,
+              thinking: normalized.thinking ?? updated[idx].thinking,
+              toolCalls: normalized.toolCalls ?? updated[idx].toolCalls,
+              usage: usage ?? updated[idx].usage,
+              durationMs: durationMs ?? updated[idx].durationMs,
+              model: model ?? updated[idx].model,
+              provider: provider ?? updated[idx].provider,
+              streaming: isToolStep ? true : updated[idx].streaming,
+            }
+            return updated
+          }
+
+          return [
+            ...prev,
+            {
+              id: messagePayload.id || nextId('rt-ai'),
+              role: 'assistant',
+              content: normalized.text,
+              thinking: normalized.thinking,
+              toolCalls: normalized.toolCalls,
+              usage,
+              durationMs,
+              model,
+              provider,
+              streaming: isToolStep,
+            },
+          ]
+        })
+        return
+      }
+
+      if (messagePayload.role === 'toolResult') {
+        const toolCallId = pickText(messagePayload.toolCallId)
+        if (!toolCallId) return
+        writeDebugLog(`realtime-tool-result toolCallId=${toolCallId}`, {
+          messagePayload,
+          containerPayload,
+        })
+        setMessages((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            const message = prev[i]
+            if (message.role !== 'assistant' || !message.toolCalls?.length) continue
+            const toolIdx = message.toolCalls.findIndex((t) => t.id === toolCallId)
+            if (toolIdx < 0) continue
+
+            const next = [...prev]
+            const nextToolCalls = [...message.toolCalls]
+            const currentTool = nextToolCalls[toolIdx]
+            nextToolCalls[toolIdx] = {
+              ...currentTool,
+              name: pickText(currentTool.name, messagePayload.toolName) || currentTool.name,
+              resultText: extractToolResultText(messagePayload.content),
+              status: messagePayload.isError ? 'error' : 'success',
+            }
+            next[i] = { ...message, toolCalls: nextToolCalls }
+            return next
+          }
+          return prev
+        })
+      }
+    },
+    [writeDebugLog]
+  )
+
+  const handleAgentToolEvent = useCallback(
+    (payload: AgentToolEventPayload): void => {
+      if (payload.stream !== 'tool') return
+      const targetSessionKey = pickText(payload.sessionKey)
+      if (targetSessionKey && sessionKeyRef.current && targetSessionKey !== sessionKeyRef.current)
+        return
+
+      const data = payload.data || {}
+      const toolCallId = pickText(data.toolCallId)
+      if (!toolCallId) return
+      const phase = pickText(data.phase) || ''
+      const toolName = pickText(data.name) || 'tool'
+      const argsText = phase === 'start' ? toJsonText(data.args) : undefined
+      const outputText =
+        phase === 'update'
+          ? toJsonText(data.partialResult)
+          : phase === 'result'
+            ? toJsonText(data.result)
+            : undefined
+
+      writeDebugLog(
+        `agent-tool runId=${payload.runId || '-'} phase=${phase || '-'} id=${toolCallId}`,
+        {
+          payload,
+          parsed: {
+            toolCallId,
+            toolName,
+            phase,
+            hasArgs: Boolean(argsText),
+            hasOutput: Boolean(outputText),
+          },
+        }
+      )
+
+      setIsStreaming(true)
+      setMessages((prev) => {
+        const streamingIdx = prev.findIndex((m) => m.role === 'assistant' && m.streaming)
+        const idx = streamingIdx >= 0 ? streamingIdx : prev.length
+        const next = [...prev]
+        if (idx === prev.length) {
+          next.push({
+            id: pickText(payload.runId) || nextId('tool-run'),
+            role: 'assistant',
+            content: '',
+            streaming: true,
+            toolCalls: [],
+          })
+        }
+        const base = next[idx]
+        const currentToolCalls = base.toolCalls ? [...base.toolCalls] : []
+        const toolIdx = currentToolCalls.findIndex((t) => t.id === toolCallId)
+
+        if (toolIdx < 0) {
+          currentToolCalls.push({
+            id: toolCallId,
+            name: toolName,
+            argumentsText: argsText,
+            resultText: outputText,
+            status: phase === 'result' ? 'success' : 'loading',
+          })
+        } else {
+          const current = currentToolCalls[toolIdx]
+          currentToolCalls[toolIdx] = {
+            ...current,
+            name: toolName || current.name,
+            argumentsText: argsText ?? current.argumentsText,
+            resultText: outputText ?? current.resultText,
+            status: phase === 'result' ? 'success' : 'loading',
+          }
+        }
+
+        next[idx] = {
+          ...base,
+          id: pickText(payload.runId) || base.id,
+          toolCalls: currentToolCalls,
+          streaming: true,
+        }
+        return next
+      })
+    },
+    [writeDebugLog]
   )
 
   const handleMessage = useCallback(
@@ -550,10 +1106,105 @@ export function useGatewayWs(): UseGatewayWsReturn {
 
       // chat 事件（流式输出）
       if (frame.type === 'event' && frame.event === 'chat') {
+        writeDebugLog('ws-event-full chat', frame)
         handleChatEvent(frame.payload as ChatEventPayload)
+        return
+      }
+
+      // 兜底：某些 runtime 会把 assistant/toolResult 作为独立 event 推送
+      if (frame.type === 'event' && frame.payload && typeof frame.payload === 'object') {
+        const payload = frame.payload as Record<string, unknown>
+        writeDebugLog(`ws-event-full ${frame.event || '-'}`, frame)
+        writeDebugLog(
+          `ws-event event=${frame.event || '-'} keys=${Object.keys(payload).join(',')}`,
+          payload
+        )
+
+        const nestedData =
+          payload.data && typeof payload.data === 'object'
+            ? (payload.data as Record<string, unknown>)
+            : undefined
+        if (frame.event === 'agent' && nestedData) {
+          writeDebugLog(`agent-data keys=${Object.keys(nestedData).join(',')}`, nestedData)
+          const agentStream = pickText(payload.stream, nestedData.stream)
+          handleAgentToolEvent({
+            runId: pickText(payload.runId, nestedData.runId),
+            sessionKey: pickText(payload.sessionKey, nestedData.sessionKey),
+            stream: agentStream,
+            // agent 事件里 data 字段本身就是工具数据（phase/name/toolCallId/...）
+            data: nestedData as AgentToolEventPayload['data'],
+          })
+
+          // agent assistant 流：payload.stream=assistant，文本增量在 data.text/data.delta
+          if (agentStream === 'assistant') {
+            const assistantText = pickText(nestedData.text)
+            const assistantDelta = pickText(nestedData.delta)
+            if (assistantText || assistantDelta) {
+              handleChatEvent({
+                state: 'delta',
+                sessionKey:
+                  pickText(payload.sessionKey, nestedData.sessionKey, sessionKeyRef.current) || '',
+                runId: pickText(payload.runId, nestedData.runId) || nextId('agent'),
+                message: { content: assistantText ?? assistantDelta ?? '' },
+                usage: nestedData.usage ?? payload.usage,
+                durationMs: toNumber(nestedData.durationMs ?? payload.durationMs),
+                model: pickText(nestedData.model, payload.model),
+                provider: pickText(nestedData.provider, payload.provider),
+                errorMessage: pickText(nestedData.errorMessage, payload.errorMessage),
+              })
+            }
+          }
+
+          // lifecycle end 作为流式收尾兜底，避免只剩“停止中”状态
+          if (agentStream === 'lifecycle' && pickText(nestedData.phase) === 'end') {
+            currentRunIdRef.current = null
+            setIsStreaming(false)
+          }
+          const nestedDataMessage =
+            nestedData.message && typeof nestedData.message === 'object'
+              ? (nestedData.message as RealtimeMessagePayload)
+              : undefined
+          const nestedDataDirect = nestedData as unknown as RealtimeMessagePayload
+          const candidateFromData = nestedDataMessage || nestedDataDirect
+          if (candidateFromData?.role === 'assistant' || candidateFromData?.role === 'toolResult') {
+            handleRealtimeMessageEvent(candidateFromData, payload)
+            return
+          }
+
+          // 某些 agent 事件通过 stream + data 传输 chat 增量，转成统一 chat-event 处理
+          const streamState = pickText(payload.stream, nestedData.stream)
+          if (
+            streamState === 'delta' ||
+            streamState === 'final' ||
+            streamState === 'aborted' ||
+            streamState === 'error'
+          ) {
+            const content = nestedData.content ?? nestedData.message ?? payload.data
+            handleChatEvent({
+              state: streamState,
+              sessionKey:
+                pickText(payload.sessionKey, nestedData.sessionKey, sessionKeyRef.current) || '',
+              runId: pickText(payload.runId, nestedData.runId) || nextId('agent'),
+              message: { content: content as string | ContentBlock[] },
+              usage: nestedData.usage ?? payload.usage,
+              durationMs: toNumber(nestedData.durationMs ?? payload.durationMs),
+              model: pickText(nestedData.model, payload.model),
+              provider: pickText(nestedData.provider, payload.provider),
+              errorMessage: pickText(nestedData.errorMessage, payload.errorMessage),
+            })
+            return
+          }
+        }
+
+        const direct = payload as unknown as RealtimeMessagePayload
+        const nested = payload.message as RealtimeMessagePayload | undefined
+        const candidate = nested && typeof nested === 'object' ? nested : direct
+        if (candidate?.role === 'assistant' || candidate?.role === 'toolResult') {
+          handleRealtimeMessageEvent(candidate, payload)
+        }
       }
     },
-    [sendConnectFrame, handleChatEvent]
+    [sendConnectFrame, handleChatEvent, handleRealtimeMessageEvent, handleAgentToolEvent]
   )
 
   // ========== 连接管理 ==========

@@ -191,6 +191,11 @@ const api = {
     getOpenclawLogPath: (): Promise<string> => ipcRenderer.invoke('log:get-openclaw-log-path'),
     readOpenclaw: (opts?: { limit?: number; level?: string }): Promise<unknown[]> =>
       ipcRenderer.invoke('log:read-openclaw', opts),
+    write: (entry: {
+      level?: 'info' | 'warn' | 'error' | 'debug'
+      tag?: string
+      message: string
+    }): Promise<void> => ipcRenderer.invoke('log:write', entry),
   },
 
   backup: {

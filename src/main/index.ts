@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, protocol, net, nativeImage } from 'electron'
-import { join } from 'path'
+import { join, isAbsolute, normalize } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { detect } from './runtime'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -12,6 +13,7 @@ import { fetchPresetsInBackground } from './services/remote-presets'
 import { getSettings } from './settings'
 import { applyElectronProxy } from './utils/proxy'
 import { installCli } from './services/cli-integration'
+import { OPENCLAW_HOME } from './constants'
 
 // ─── 注册自定义协议（必须在 app.whenReady() 之前调用） ───
 //
@@ -138,7 +140,24 @@ if (!gotTheLock) {
     // 注册 app:// 协议处理器，将请求映射到 renderer 静态文件
     // 打包后：Origin 头固定为 "app://localhost"，写入 allowedOrigins 即可
     protocol.handle('app', async (request) => {
-      const { pathname } = new URL(request.url)
+      const url = new URL(request.url)
+      if (url.host === 'local-file') {
+        const rawPath = url.searchParams.get('path')
+        const decodedPath = rawPath ? decodeURIComponent(rawPath) : ''
+        const normalizedPath = normalize(decodedPath)
+        const mediaRoot = join(OPENCLAW_HOME, 'media')
+
+        // 仅允许读取 ~/.openclaw/media 下的本地媒体，避免任意文件泄露
+        if (!decodedPath || !isAbsolute(normalizedPath) || !normalizedPath.startsWith(mediaRoot)) {
+          log.warn('Blocked local-file request:', decodedPath)
+          return new Response('Forbidden', { status: 403 })
+        }
+
+        log.debug('local-file request:', normalizedPath)
+        return net.fetch(pathToFileURL(normalizedPath).toString())
+      }
+
+      const { pathname } = url
       // pathname='/' → index.html；其余去掉前导 /
       const relative = pathname === '/' ? 'index.html' : pathname.slice(1)
       const filePath = join(__dirname, '../renderer', relative)

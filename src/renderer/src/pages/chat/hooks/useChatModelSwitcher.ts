@@ -105,7 +105,9 @@ export function useChatModelSwitcher({
     ])
 
     const result = Array.isArray(raw) ? { sessions: raw } : raw
-    const session = (result.sessions || []).find((item) => (item.key || item.sessionKey) === sessionKey)
+    const session = (result.sessions || []).find(
+      (item) => (item.key || item.sessionKey) === sessionKey
+    )
     const defaultValue =
       typeof defaultConfig === 'string' ? defaultConfig : (defaultConfig?.primary ?? '')
 
@@ -129,7 +131,10 @@ export function useChatModelSwitcher({
   const loadModelCatalog = useCallback(async (): Promise<void> => {
     setLoadingModels(true)
     try {
-      const providers = (await window.api.model.listProviders()) as Record<string, ConfiguredProvider>
+      const providers = (await window.api.model.listProviders()) as Record<
+        string,
+        ConfiguredProvider
+      >
       const entries: ModelCatalogEntry[] = []
 
       for (const [providerKey, config] of Object.entries(providers)) {
@@ -207,7 +212,8 @@ export function useChatModelSwitcher({
         setDefaultModel(verifiedState.defaultModel)
 
         const expectedModel = normalizedNext || defaultModel
-        const actualModel = verifiedState.currentModel || resolvedModel || verifiedState.defaultModel
+        const actualModel =
+          verifiedState.currentModel || resolvedModel || verifiedState.defaultModel
 
         if (expectedModel && actualModel && expectedModel !== actualModel) {
           throw new Error(`Gateway resolved ${actualModel}, expected ${expectedModel}`)

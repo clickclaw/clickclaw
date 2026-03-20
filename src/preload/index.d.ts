@@ -658,6 +658,11 @@ declare global {
       readClickclaw: () => Promise<string[]>
       getOpenclawLogPath: () => Promise<string>
       readOpenclaw: (opts?: { limit?: number; level?: string }) => Promise<OpenclawLogEntry[]>
+      write: (entry: {
+        level?: 'info' | 'warn' | 'error' | 'debug'
+        tag?: string
+        message: string
+      }) => Promise<void>
     }
 
     /** 配置备份管理 */
