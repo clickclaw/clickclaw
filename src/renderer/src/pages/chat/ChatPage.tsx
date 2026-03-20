@@ -26,8 +26,9 @@ import {
   PaperClipOutlined,
   RocketOutlined,
   CheckCircleOutlined,
+  RobotOutlined,
 } from '@ant-design/icons'
-import { useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useGatewayContext } from '../../contexts/GatewayContext'
 import { ChatEmptyState } from './components/ChatEmptyState'
@@ -64,19 +65,22 @@ function ChatPage(): React.ReactElement {
     gatewayRunning,
     sessions,
     defaultAgentId,
+    isDraftSession,
+    currentSessionAgentId,
     sendMessage,
     abortMessage,
     newSession,
+    setDraftAgent,
     reconnect,
     switchSession,
     deleteSession,
     resetSession,
     sessionKey,
+    listAgents,
     callRpc,
   } = useGatewayContext()
 
   const { handleOpenNewSession, handleDeleteSession, handleResetSession } = useChatSessions({
-    defaultAgentId,
     sessions,
     newSession,
     deleteSession,
@@ -124,6 +128,8 @@ function ChatPage(): React.ReactElement {
   })
 
   const quickPrompts = useChatPrompts(t)
+  const [agentOptions, setAgentOptions] = useState<Array<{ value: string; label: string }>>([])
+  const [loadingAgents, setLoadingAgents] = useState(false)
   const slashCommands = useChatCommands(t)
   const {
     showThinking,
@@ -171,6 +177,37 @@ function ChatPage(): React.ReactElement {
       label: option.label,
     })),
   ]
+  const canSelectDraftAgent = isDraftSession && messages.length === 0 && !isStreaming
+  const selectedAgentLabel =
+    agentOptions.find((item) => item.value === currentSessionAgentId)?.label ||
+    currentSessionAgentId ||
+    defaultAgentId
+  const agentMenuItems = useMemo(
+    () =>
+      agentOptions.map((option) => ({
+        key: option.value,
+        label: option.label,
+      })),
+    [agentOptions]
+  )
+
+  useEffect(() => {
+    if (status !== 'ready') return
+    setLoadingAgents(true)
+    listAgents()
+      .then((result) => {
+        const rows = result?.agents || []
+        const items = rows.map((agent) => {
+          const name = agent.identity?.name || agent.name || agent.id
+          return {
+            value: agent.id,
+            label: name,
+          }
+        })
+        setAgentOptions(items)
+      })
+      .finally(() => setLoadingAgents(false))
+  }, [listAgents, status])
 
   // ========== Gateway 未运行状态 ==========
 
@@ -411,15 +448,6 @@ function ChatPage(): React.ReactElement {
                         title={t('chat.attachments.addFile')}
                       />
                       <Divider type="vertical" style={{ margin: 0 }} />
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: token.colorTextSecondary,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {t('chat.model.label')}
-                      </span>
                       <Dropdown
                         trigger={['click']}
                         menu={{
@@ -440,6 +468,7 @@ function ChatPage(): React.ReactElement {
                           type="text"
                           loading={loadingModels || switchingModel}
                           disabled={modelSelectDisabled}
+                          title={t('chat.model.label')}
                           style={{
                             borderRadius: 999,
                             background: token.colorFillTertiary,
@@ -479,7 +508,55 @@ function ChatPage(): React.ReactElement {
                       >
                         {sessionKey || t('chat.model.noSession')}
                       </span>
-                      <Divider type="vertical" style={{ margin: 0 }} />
+                      {canSelectDraftAgent ? (
+                        <>
+                          <Divider type="vertical" style={{ margin: 0 }} />
+                          <Dropdown
+                            trigger={['click']}
+                            menu={{
+                              items: agentMenuItems,
+                              selectable: true,
+                              selectedKeys: [currentSessionAgentId],
+                              onClick: ({ key }) => setDraftAgent(String(key)),
+                            }}
+                            disabled={loadingAgents}
+                          >
+                            <Button
+                              type="text"
+                              icon={<RobotOutlined />}
+                              disabled={loadingAgents}
+                              title={t('chat.agent.label')}
+                              style={{
+                                borderRadius: 999,
+                                background: token.colorFillTertiary,
+                                color: token.colorText,
+                                paddingInline: 12,
+                                height: 32,
+                                minWidth: 120,
+                                justifyContent: 'space-between',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 8,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  maxWidth: 140,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {selectedAgentLabel}
+                              </span>
+                              <DownOutlined
+                                style={{ fontSize: 11, color: token.colorTextTertiary }}
+                              />
+                            </Button>
+                          </Dropdown>
+                          <Divider type="vertical" style={{ margin: 0 }} />
+                        </>
+                      ) : null}
                       <Flex align="center" gap={6} wrap="wrap">
                         <Flex align="center" gap={4}>
                           <Switch size="small" checked={showThinking} onChange={setShowThinking} />

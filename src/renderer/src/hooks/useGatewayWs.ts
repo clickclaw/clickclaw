@@ -77,6 +77,12 @@ export interface SessionItem {
   updatedAt?: number
 }
 
+interface DraftSessionState {
+  name: string
+  agentId: string
+  createdAt: number
+}
+
 export interface ChatEventPayload {
   state: 'delta' | 'final' | 'aborted' | 'error'
   sessionKey: string
@@ -323,6 +329,21 @@ export function parseSessionLabel(key: string): string {
   return `${agent} / ${channel}`
 }
 
+function isDraftSessionKey(key?: string | null): boolean {
+  return Boolean(key && key.startsWith('draft:'))
+}
+
+function parseAgentIdFromSessionKey(key?: string | null): string | undefined {
+  if (!key) return undefined
+  const parts = key.split(':')
+  if (parts.length < 2) return undefined
+  return parts[1] || undefined
+}
+
+function buildDraftSessionKey(name: string): string {
+  return `draft:${Date.now()}:${Math.random().toString(36).slice(2, 7)}:${name}`
+}
+
 // ========== Hook ==========
 
 /** agents.list RPC 返回的单个 Agent 行 */
@@ -360,12 +381,18 @@ export interface UseGatewayWsReturn {
   sessions: SessionItem[]
   /** 握手时获取的默认 agentId */
   defaultAgentId: string
+  /** 当前会话是否为本地草稿（首次发送前） */
+  isDraftSession: boolean
+  /** 当前会话绑定的 agentId（草稿态可修改） */
+  currentSessionAgentId: string
   /** 发送聊天消息（支持附件） */
   sendMessage: (text: string, attachments?: AttachmentPayload[]) => void
   /** 中止当前流式生成 */
   abortMessage: () => void
   /** 新建会话：切换到 agent:<agentId>:<name> */
   newSession: (name: string, agentId?: string) => void
+  /** 仅草稿会话可用：切换会话绑定的 agent */
+  setDraftAgent: (agentId: string) => void
   /** 手动重连 */
   reconnect: () => void
   /** 切换到指定会话 */
@@ -392,6 +419,7 @@ export function useGatewayWs(): UseGatewayWsReturn {
   const [gatewayRunning, setGatewayRunning] = useState(false)
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [defaultAgentId, setDefaultAgentId] = useState('main')
+  const [draftSessions, setDraftSessions] = useState<Record<string, DraftSessionState>>({})
 
   const wsRef = useRef<WebSocket | null>(null)
   const pendingRef = useRef<
@@ -421,6 +449,8 @@ export function useGatewayWs(): UseGatewayWsReturn {
   const autoPairAndReconnectRef = useRef<(() => Promise<void>) | null>(null)
   /** 最近浏览过的会话历史缓存，减少切换闪白 */
   const messageCacheRef = useRef<Map<string, ChatMessage[]>>(new Map())
+  /** 本地草稿会话（首次发送前） */
+  const draftSessionsRef = useRef<Record<string, DraftSessionState>>({})
 
   const writeDebugLog = useCallback((message: string, data?: unknown): void => {
     const suffix = data === undefined ? '' : ` | ${stringifyForDebugLog(data)}`
@@ -445,6 +475,9 @@ export function useGatewayWs(): UseGatewayWsReturn {
   useEffect(() => {
     statusRef.current = status
   }, [status])
+  useEffect(() => {
+    draftSessionsRef.current = draftSessions
+  }, [draftSessions])
 
   // ========== 工具函数 ==========
 
@@ -519,7 +552,14 @@ export function useGatewayWs(): UseGatewayWsReturn {
           }
         })
         items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-        setSessions(items)
+        const draftItems: SessionItem[] = Object.entries(draftSessionsRef.current).map(
+          ([key, draft]) => ({
+            key,
+            label: draft.name,
+            updatedAt: draft.createdAt,
+          })
+        )
+        setSessions([...draftItems, ...items])
       })
       .catch(() => {})
   }, [rpc])
@@ -1404,8 +1444,43 @@ export function useGatewayWs(): UseGatewayWsReturn {
 
   const sendMessage = useCallback(
     (text: string, attachments?: AttachmentPayload[]): void => {
-      const key = sessionKeyRef.current
-      if (!key || status !== 'ready') return
+      const currentKey = sessionKeyRef.current
+      if (!currentKey || status !== 'ready') return
+
+      let key = currentKey
+      if (isDraftSessionKey(currentKey)) {
+        const draft = draftSessionsRef.current[currentKey]
+        if (!draft) return
+        const committedKey = `agent:${draft.agentId}:${draft.name}`
+        key = committedKey
+
+        // 首次发送时才将草稿会话提交为真实会话
+        setDraftSessions((prev) => {
+          const next = { ...prev }
+          delete next[currentKey]
+          return next
+        })
+        setSessions((prev) => {
+          const withoutDraft = prev.filter((s) => s.key !== currentKey)
+          if (withoutDraft.find((s) => s.key === committedKey)) return withoutDraft
+          return [
+            {
+              key: committedKey,
+              label: parseSessionLabel(committedKey),
+              updatedAt: Date.now(),
+            },
+            ...withoutDraft,
+          ]
+        })
+
+        const cached = messageCacheRef.current.get(currentKey)
+        if (cached) {
+          messageCacheRef.current.set(committedKey, cached)
+          messageCacheRef.current.delete(currentKey)
+        }
+        setSessionKey(committedKey)
+        sessionKeyRef.current = committedKey
+      }
 
       // 追加用户消息
       const userMsg: ChatMessage = {
@@ -1448,7 +1523,7 @@ export function useGatewayWs(): UseGatewayWsReturn {
         console.error('[chat] send failed:', err)
       })
     },
-    [status, rpc]
+    [rpc, status]
   )
 
   const abortMessage = useCallback((): void => {
@@ -1474,6 +1549,12 @@ export function useGatewayWs(): UseGatewayWsReturn {
       const cached = messageCacheRef.current.get(key)
       if (cached) {
         setMessages(cached)
+      } else if (isDraftSessionKey(key)) {
+        setMessages([])
+      }
+      if (isDraftSessionKey(key)) {
+        setHistoryLoading(false)
+        return
       }
       loadHistory(key)
     },
@@ -1484,20 +1565,60 @@ export function useGatewayWs(): UseGatewayWsReturn {
     (name: string, agentId?: string): void => {
       const key = sessionKeyRef.current
       // 用传入的 agentId，或从当前 sessionKey 解析（格式：agent:<agentId>:<channelName>）
-      const resolvedAgentId = agentId || (key ? key.split(':')[1] : undefined) || 'main'
-      const newKey = `agent:${resolvedAgentId}:${name}`
+      const resolvedAgentId = agentId || parseAgentIdFromSessionKey(key) || defaultAgentId || 'main'
+      const newKey = buildDraftSessionKey(name)
+      const createdAt = Date.now()
+      setDraftSessions((prev) => ({
+        ...prev,
+        [newKey]: { name, agentId: resolvedAgentId, createdAt },
+      }))
       // 立即在会话列表插入虚拟条目，无需等待发送消息后 Gateway 才更新列表
       setSessions((prev) => {
         if (prev.find((s) => s.key === newKey)) return prev
-        return [{ key: newKey, label: parseSessionLabel(newKey), updatedAt: Date.now() }, ...prev]
+        return [{ key: newKey, label: name, updatedAt: createdAt }, ...prev]
       })
       switchSession(newKey)
     },
-    [switchSession]
+    [defaultAgentId, switchSession]
   )
+
+  const setDraftAgent = useCallback((agentId: string): void => {
+    const key = sessionKeyRef.current
+    if (!key || !isDraftSessionKey(key)) return
+    const normalized = agentId.trim()
+    if (!normalized) return
+    setDraftSessions((prev) => {
+      const draft = prev[key]
+      if (!draft) return prev
+      return {
+        ...prev,
+        [key]: { ...draft, agentId: normalized },
+      }
+    })
+  }, [])
 
   const deleteSession = useCallback(
     (key: string): Promise<void> => {
+      if (isDraftSessionKey(key)) {
+        setDraftSessions((prev) => {
+          const next = { ...prev }
+          delete next[key]
+          return next
+        })
+        setSessions((prev) => prev.filter((s) => s.key !== key))
+        if (key === sessionKeyRef.current) {
+          const mainKey = mainSessionKeyRef.current
+          if (mainKey) switchSession(mainKey)
+          else {
+            setSessionKey(null)
+            sessionKeyRef.current = null
+            setMessages([])
+          }
+        }
+        messageCacheRef.current.delete(key)
+        return Promise.resolve()
+      }
+
       const mainKey = mainSessionKeyRef.current
       // 主会话不允许删除
       if (key === mainKey) return Promise.reject(new Error('main'))
@@ -1522,6 +1643,12 @@ export function useGatewayWs(): UseGatewayWsReturn {
       const key = targetKey || sessionKeyRef.current
       if (!key) return Promise.resolve()
 
+      if (isDraftSessionKey(key)) {
+        if (key === sessionKeyRef.current) setMessages([])
+        messageCacheRef.current.set(key, [])
+        return Promise.resolve()
+      }
+
       // 乐观更新：重置当前会话时立即清空消息
       if (key === sessionKeyRef.current) {
         setMessages([])
@@ -1539,6 +1666,11 @@ export function useGatewayWs(): UseGatewayWsReturn {
     return rpc('agents.list', {}) as Promise<AgentsListResult>
   }, [status, rpc])
 
+  const isDraftSession = isDraftSessionKey(sessionKey)
+  const currentSessionAgentId = isDraftSession
+    ? (sessionKey ? draftSessions[sessionKey]?.agentId : undefined) || defaultAgentId
+    : parseAgentIdFromSessionKey(sessionKey) || defaultAgentId
+
   return {
     status,
     sessionKey,
@@ -1549,9 +1681,12 @@ export function useGatewayWs(): UseGatewayWsReturn {
     isStreaming,
     sessions,
     defaultAgentId,
+    isDraftSession,
+    currentSessionAgentId,
     sendMessage,
     abortMessage,
     newSession,
+    setDraftAgent,
     reconnect,
     switchSession,
     deleteSession,

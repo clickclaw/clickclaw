@@ -8,6 +8,7 @@ const { Sider } = Layout
 interface ChatSessionItem {
   key: string
   label: string
+  updatedAt?: number
 }
 
 interface ChatSessionsSiderProps {
@@ -39,6 +40,33 @@ export function ChatSessionsSider({
   onDeleteSession,
   t,
 }: ChatSessionsSiderProps): React.ReactElement {
+  const now = new Date()
+  const todayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const yesterdayKey = `${yesterday.getFullYear()}-${yesterday.getMonth()}-${yesterday.getDate()}`
+
+  const groups = sessions.reduce<Array<{ key: string; title: string; items: ChatSessionItem[] }>>(
+    (acc, session) => {
+      const date = session.updatedAt ? new Date(session.updatedAt) : new Date(0)
+      const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+      let title = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+        date.getDate()
+      ).padStart(2, '0')}`
+      if (dayKey === todayKey) title = t('chat.sessions.group.today')
+      else if (dayKey === yesterdayKey) title = t('chat.sessions.group.yesterday')
+
+      const existing = acc.find((group) => group.key === dayKey)
+      if (existing) {
+        existing.items.push(session)
+      } else {
+        acc.push({ key: dayKey, title, items: [session] })
+      }
+      return acc
+    },
+    []
+  )
+
   return (
     <Sider
       width={220}
@@ -74,37 +102,68 @@ export function ChatSessionsSider({
               {t('chat.sessions.empty')}
             </div>
           ) : (
-            <Conversations
-              activeKey={sessionKey || undefined}
-              onActiveChange={(key) => onSwitchSession(key)}
-              items={sessions.map((s) => ({
-                key: s.key,
-                label: s.label,
-                icon: <MessageOutlined style={{ color: '#FF4D2A' }} />,
-              }))}
-              menu={(conversation) => ({
-                items: [
-                  {
-                    key: 'reset',
-                    label: t('chat.sessions.resetSession'),
-                    icon: <ClearOutlined />,
-                  },
-                  {
-                    key: 'delete',
-                    label: t('chat.sessions.deleteSession'),
-                    icon: <DeleteOutlined />,
-                    danger: true,
-                  },
-                ],
-                onClick: ({ key }: { key: string }) => {
-                  if (key === 'reset') onResetSession(conversation.key)
-                  if (key === 'delete') onDeleteSession(conversation.key)
-                },
-              })}
-              styles={{
-                item: { borderRadius: 6, margin: '2px 8px' },
-              }}
-            />
+            <div style={{ paddingBottom: 8 }}>
+              {groups.map((group) => (
+                <div key={group.key} style={{ marginBottom: 6 }}>
+                  <div
+                    style={{
+                      padding: '8px 14px 4px',
+                      fontSize: 11,
+                      color: tokenTextTertiary,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    {group.title}
+                  </div>
+                  <Conversations
+                    activeKey={sessionKey || undefined}
+                    onActiveChange={(key) => onSwitchSession(key)}
+                    items={group.items.map((s) => ({
+                      key: s.key,
+                      label: (
+                        <span
+                          title={s.label}
+                          style={{
+                            display: 'inline-block',
+                            maxWidth: 138,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            verticalAlign: 'bottom',
+                          }}
+                        >
+                          {s.label}
+                        </span>
+                      ),
+                      icon: <MessageOutlined style={{ color: '#FF4D2A' }} />,
+                    }))}
+                    menu={(conversation) => ({
+                      items: [
+                        {
+                          key: 'reset',
+                          label: t('chat.sessions.resetSession'),
+                          icon: <ClearOutlined />,
+                        },
+                        {
+                          key: 'delete',
+                          label: t('chat.sessions.deleteSession'),
+                          icon: <DeleteOutlined />,
+                          danger: true,
+                        },
+                      ],
+                      onClick: ({ key }: { key: string }) => {
+                        if (key === 'reset') onResetSession(conversation.key)
+                        if (key === 'delete') onDeleteSession(conversation.key)
+                      },
+                    })}
+                    styles={{
+                      item: { borderRadius: 6, margin: '2px 8px' },
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

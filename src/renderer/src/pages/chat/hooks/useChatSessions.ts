@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 
 interface UseChatSessionsArgs {
-  defaultAgentId: string
   sessions: Array<{ key: string; label: string }>
   newSession: (name: string, agentId?: string) => void
   deleteSession: (key: string) => Promise<void>
@@ -25,7 +24,6 @@ interface UseChatSessionsArgs {
 }
 
 export function useChatSessions({
-  defaultAgentId,
   sessions,
   newSession,
   deleteSession,
@@ -41,9 +39,9 @@ export function useChatSessions({
     ).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(
       now.getMinutes()
     ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-    newSession(autoName, defaultAgentId)
+    newSession(autoName)
     messageApi.success(t('chat.sessions.newSessionSuccess'))
-  }, [defaultAgentId, messageApi, newSession, t])
+  }, [messageApi, newSession, t])
 
   const handleDeleteSession = useCallback(
     (key: string): void => {

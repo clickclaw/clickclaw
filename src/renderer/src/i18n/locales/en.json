@@ -286,6 +286,9 @@
       "switchFailed": "Failed to switch model: {{error}}",
       "noSession": "No session selected"
     },
+    "agent": {
+      "label": "Agent"
+    },
     "display": {
       "thinking": "Thinking",
       "tools": "Tools",
@@ -298,6 +301,10 @@
     },
     "sessions": {
       "title": "Sessions",
+      "group": {
+        "today": "Today",
+        "yesterday": "Yesterday"
+      },
       "empty": "No sessions",
       "newSession": "New Session",
       "deleteSession": "Delete Session",

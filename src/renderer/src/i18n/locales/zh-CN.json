@@ -288,6 +288,9 @@
       "switchFailed": "切换模型失败：{{error}}",
       "noSession": "未选择会话"
     },
+    "agent": {
+      "label": "智能体"
+    },
     "display": {
       "thinking": "思考",
       "tools": "工具",
@@ -300,6 +303,10 @@
     },
     "sessions": {
       "title": "会话列表",
+      "group": {
+        "today": "今天",
+        "yesterday": "昨天"
+      },
       "empty": "暂无会话",
       "newSession": "新建会话",
       "deleteSession": "删除会话",
