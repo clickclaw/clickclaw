@@ -1,3 +1,4 @@
+import { Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { DefaultModelBannerProps } from '../model-page.types'
 import { getBrandByKey } from '../model-page.utils'
@@ -6,6 +7,7 @@ import { ProviderAvatarByKey } from './ProviderAvatar'
 export function DefaultModelBanner({
   defaultModel,
   brands,
+  onEditFallbacks,
 }: DefaultModelBannerProps): React.ReactElement | null {
   const { t } = useTranslation()
   if (!defaultModel) return null
@@ -62,6 +64,11 @@ export function DefaultModelBanner({
           </div>
         )}
       </div>
+      {onEditFallbacks && (
+        <Button type="link" size="small" onClick={onEditFallbacks} style={{ padding: 0 }}>
+          {t('models.editPrimaryAndFallbacks')}
+        </Button>
+      )}
     </div>
   )
 }

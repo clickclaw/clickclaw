@@ -72,17 +72,23 @@ export function ModelRow({
       <div style={{ width: 44, textAlign: 'right', flexShrink: 0 }}>{statusNode()}</div>
       <div style={{ width: 16, flexShrink: 0 }}>
         {isPrimary ? (
-          <StarFilled style={{ color: '#FF4D2A', fontSize: 12 }} />
+          <Tooltip title={t('models.currentPrimary')}>
+            <span>
+              <StarFilled style={{ color: '#FF4D2A', fontSize: 12 }} />
+            </span>
+          </Tooltip>
         ) : (
-          <StarOutlined
-            style={{
-              color: hovered ? '#ddd' : 'transparent',
-              fontSize: 12,
-              cursor: 'pointer',
-              transition: 'color 0.1s',
-            }}
-            onClick={onSetPrimary}
-          />
+          <Tooltip title={t('models.setPrimary')}>
+            <StarOutlined
+              style={{
+                color: hovered ? '#ddd' : 'transparent',
+                fontSize: 12,
+                cursor: 'pointer',
+                transition: 'color 0.1s',
+              }}
+              onClick={onSetPrimary}
+            />
+          </Tooltip>
         )}
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>

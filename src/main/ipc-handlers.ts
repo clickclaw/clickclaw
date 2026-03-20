@@ -654,7 +654,10 @@ export function registerIpcHandlers(): void {
       }
     ) => {
       try {
-        const url = `${params.baseUrl.replace(/\/$/, '')}/v1/models`
+        const normalizedBase = params.baseUrl.trim().replace(/\/+$/, '')
+        const url = /\/v1$/i.test(normalizedBase)
+          ? `${normalizedBase}/models`
+          : `${normalizedBase}/v1/models`
         const response = await proxyFetch(url, {
           headers: { Authorization: `Bearer ${params.apiKey}` },
           signal: AbortSignal.timeout(15000),

@@ -138,6 +138,7 @@ export interface RemoteListModalProps {
 export interface DefaultModelBannerProps {
   defaultModel: string | { primary: string; fallbacks?: string[] } | null
   brands: DisplayBrand[]
+  onEditFallbacks?: () => void
 }
 
 export interface EmptyStateProps {

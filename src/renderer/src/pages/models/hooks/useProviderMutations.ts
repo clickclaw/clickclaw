@@ -121,8 +121,36 @@ export function useProviderMutations({
 
   const setPrimary = useCallback(
     async (providerKey: string, modelId: string) => {
-      await window.api.model.setDefault(`${providerKey}/${modelId}`, [])
+      const nextPrimary = `${providerKey}/${modelId}`
+      const currentFallbacks =
+        defaultModel && typeof defaultModel === 'object'
+          ? (defaultModel.fallbacks || []).filter((item) => item !== nextPrimary)
+          : []
+      await window.api.model.setDefault(nextPrimary, currentFallbacks)
       message.success(t('models.setDefaultSuccess'))
+      touch()
+    },
+    [defaultModel, message, t, touch]
+  )
+
+  const setFallbacks = useCallback(
+    async (fallbacks: string[]) => {
+      const currentPrimary = typeof defaultModel === 'string' ? defaultModel : defaultModel?.primary
+      if (!currentPrimary) return
+      const nextFallbacks = Array.from(new Set(fallbacks)).filter((item) => item !== currentPrimary)
+      await window.api.model.setDefault(currentPrimary, nextFallbacks)
+      message.success(t('models.setFallbacksSuccess'))
+      touch()
+    },
+    [defaultModel, message, t, touch]
+  )
+
+  const setPrimaryAndFallbacks = useCallback(
+    async (primary: string, fallbacks: string[]) => {
+      if (!primary) return
+      const nextFallbacks = Array.from(new Set(fallbacks)).filter((item) => item !== primary)
+      await window.api.model.setDefault(primary, nextFallbacks)
+      message.success(t('models.setPrimaryAndFallbacksSuccess'))
       touch()
     },
     [message, t, touch]
@@ -138,5 +166,7 @@ export function useProviderMutations({
     saveModel,
     deleteModel,
     setPrimary,
+    setFallbacks,
+    setPrimaryAndFallbacks,
   }
 }

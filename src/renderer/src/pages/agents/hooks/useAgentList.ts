@@ -13,21 +13,27 @@ export function useAgentList(
   const loadAgents = useCallback(async () => {
     setLoading(true)
     try {
+      const configAgents = (await window.api.agent.list()) as AgentConfig[]
+      const configMap = new Map(configAgents.map((a) => [a.id, a]))
+
       if (status === 'ready') {
         const result = await listAgents()
         if (result) {
-          const configAgents = (await window.api.agent.list()) as AgentConfig[]
-          const configMap = new Map(configAgents.map((a) => [a.id, a]))
-          const list: AgentConfig[] = result.agents.map((row) => {
+          const runtimeIds = new Set(result.agents.map((row) => row.id))
+          const runtimeFirst: AgentConfig[] = result.agents.map((row) => {
             const conf = configMap.get(row.id)
             return {
               ...(conf || {}),
               id: row.id,
-              name: row.name || row.identity?.name,
-              identity: row.identity,
-              default: row.id === result.defaultId,
+              name: row.name || row.identity?.name || conf?.name,
+              identity: row.identity || conf?.identity,
+              default: row.id === result.defaultId || conf?.default,
             }
           })
+          const configOnly: AgentConfig[] = configAgents.filter(
+            (agent) => !runtimeIds.has(agent.id)
+          )
+          const list: AgentConfig[] = [...runtimeFirst, ...configOnly]
           setAgents(list)
           setSelectedId((prev) => {
             if (prev && list.some((a) => a.id === prev)) return prev
@@ -36,7 +42,7 @@ export function useAgentList(
           return
         }
       }
-      const list = (await window.api.agent.list()) as AgentConfig[]
+      const list = configAgents
       setAgents(list)
       setSelectedId((prev) => {
         if (prev && list.some((a) => a.id === prev)) return prev

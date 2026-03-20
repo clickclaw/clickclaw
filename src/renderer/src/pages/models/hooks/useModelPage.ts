@@ -1,5 +1,6 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { ModelDef, ProviderConfig } from '../model-page.types'
+import { getPrimaryModelPath } from '../model-page.utils'
 import { useModelPageUiState } from './useModelPageUiState'
 import { useProviderMutations } from './useProviderMutations'
 import { useProviderPresets } from './useProviderPresets'
@@ -22,6 +23,8 @@ export function useModelPage() {
     saveModel,
     deleteModel,
     setPrimary,
+    setFallbacks,
+    setPrimaryAndFallbacks,
   } = useProviderMutations({
     providers,
     defaultModel,
@@ -80,6 +83,21 @@ export function useModelPage() {
     [saveModel, setModelDrawerOpen]
   )
 
+  const fallbackOptions = useMemo(
+    () =>
+      providers.flatMap((entry) =>
+        (entry.config.models || []).map((model) => `${entry.key}/${model.id}`)
+      ),
+    [providers]
+  )
+
+  const fallbackValue = useMemo(
+    () => (defaultModel && typeof defaultModel === 'object' ? defaultModel.fallbacks || [] : []),
+    [defaultModel]
+  )
+
+  const primaryModelPath = useMemo(() => getPrimaryModelPath(defaultModel), [defaultModel])
+
   return {
     brands,
     brandSections,
@@ -114,6 +132,11 @@ export function useModelPage() {
     handleSaveModel,
     handleDeleteModel: deleteModel,
     handleSetPrimary: setPrimary,
+    handleSetFallbacks: setFallbacks,
+    handleSetPrimaryAndFallbacks: setPrimaryAndFallbacks,
+    fallbackOptions,
+    fallbackValue,
+    primaryModelPath,
     handleFetchRemote,
     handleAddRemoteModels,
   }
