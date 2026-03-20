@@ -190,6 +190,16 @@ function ChatPage(): React.ReactElement {
       })),
     [agentOptions]
   )
+  const sessionKeyDisplay = useMemo(() => {
+    if (!sessionKey) return t('chat.model.noSession')
+    if (sessionKey.startsWith('draft:')) {
+      const parts = sessionKey.split(':')
+      const draftName = parts.slice(3).join(':') || 'draft'
+      return `draft:${draftName}`
+    }
+    if (sessionKey.length <= 44) return sessionKey
+    return `${sessionKey.slice(0, 24)}...${sessionKey.slice(-14)}`
+  }, [sessionKey, t])
 
   useEffect(() => {
     if (status !== 'ready') return
@@ -362,6 +372,106 @@ function ChatPage(): React.ReactElement {
       <Content style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* 顶部状态栏 */}
         <StatusBar status={status} errorMsg={errorMsg} onReconnect={reconnect} />
+        <div
+          style={{
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            padding: '8px 24px',
+            background: token.colorBgContainer,
+            flexShrink: 0,
+          }}
+        >
+          <Flex justify="flex-end" align="center" gap={8} wrap="wrap">
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                borderRadius: 999,
+                background: token.colorFillTertiary,
+                padding: '2px 10px',
+                maxWidth: 520,
+              }}
+            >
+              <span style={{ color: token.colorTextTertiary }}>{t('chat.sessions.title')}</span>
+              <span
+                style={{
+                  color: token.colorText,
+                  minWidth: 0,
+                  maxWidth: 420,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={sessionKey || t('chat.model.noSession')}
+              >
+                {sessionKeyDisplay}
+              </span>
+            </span>
+            {canSelectDraftAgent ? (
+              <Dropdown
+                trigger={['click']}
+                menu={{
+                  items: agentMenuItems,
+                  selectable: true,
+                  selectedKeys: [currentSessionAgentId],
+                  onClick: ({ key }) => setDraftAgent(String(key)),
+                }}
+                disabled={loadingAgents}
+              >
+                <Button
+                  type="text"
+                  icon={<RobotOutlined />}
+                  disabled={loadingAgents}
+                  title={t('chat.agent.label')}
+                  style={{
+                    borderRadius: 999,
+                    background: token.colorFillTertiary,
+                    color: token.colorText,
+                    paddingInline: 12,
+                    height: 28,
+                    minWidth: 160,
+                    justifyContent: 'space-between',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span style={{ color: token.colorTextTertiary }}>{t('chat.agent.label')}</span>
+                  <span
+                    style={{
+                      maxWidth: 140,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {selectedAgentLabel}
+                  </span>
+                  <DownOutlined style={{ fontSize: 11, color: token.colorTextTertiary }} />
+                </Button>
+              </Dropdown>
+            ) : (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: token.colorText,
+                  borderRadius: 999,
+                  background: token.colorFillTertiary,
+                  padding: '2px 10px',
+                  maxWidth: 260,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={selectedAgentLabel}
+              >
+                <span style={{ color: token.colorTextTertiary }}>{t('chat.agent.label')}: </span>
+                {selectedAgentLabel}
+              </span>
+            )}
+          </Flex>
+        </div>
 
         {/* 消息区域 */}
         <div ref={messagesContainerRef} style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
@@ -495,68 +605,7 @@ function ChatPage(): React.ReactElement {
                           <DownOutlined style={{ fontSize: 11, color: token.colorTextTertiary }} />
                         </Button>
                       </Dropdown>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: token.colorTextTertiary,
-                          minWidth: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                        title={sessionKey || t('chat.model.noSession')}
-                      >
-                        {sessionKey || t('chat.model.noSession')}
-                      </span>
-                      {canSelectDraftAgent ? (
-                        <>
-                          <Divider type="vertical" style={{ margin: 0 }} />
-                          <Dropdown
-                            trigger={['click']}
-                            menu={{
-                              items: agentMenuItems,
-                              selectable: true,
-                              selectedKeys: [currentSessionAgentId],
-                              onClick: ({ key }) => setDraftAgent(String(key)),
-                            }}
-                            disabled={loadingAgents}
-                          >
-                            <Button
-                              type="text"
-                              icon={<RobotOutlined />}
-                              disabled={loadingAgents}
-                              title={t('chat.agent.label')}
-                              style={{
-                                borderRadius: 999,
-                                background: token.colorFillTertiary,
-                                color: token.colorText,
-                                paddingInline: 12,
-                                height: 32,
-                                minWidth: 120,
-                                justifyContent: 'space-between',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 8,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  maxWidth: 140,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {selectedAgentLabel}
-                              </span>
-                              <DownOutlined
-                                style={{ fontSize: 11, color: token.colorTextTertiary }}
-                              />
-                            </Button>
-                          </Dropdown>
-                          <Divider type="vertical" style={{ margin: 0 }} />
-                        </>
-                      ) : null}
+                      <Divider type="vertical" style={{ margin: 0 }} />
                       <Flex align="center" gap={6} wrap="wrap">
                         <Flex align="center" gap={4}>
                           <Switch size="small" checked={showThinking} onChange={setShowThinking} />
