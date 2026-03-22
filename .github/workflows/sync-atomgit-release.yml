@@ -1,0 +1,98 @@
+name: 同步 AtomGit 发布
+
+on:
+  workflow_run:
+    workflows: ['构建并发布']
+    types: [completed]
+
+jobs:
+  sync:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: 检出触发提交
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: 读取版本和标签
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: 确认 GitHub Release 已存在
+        id: release_check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub Release ${RELEASE_TAG} 不存在，跳过 AtomGit 同步。"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+
+      - name: 拉取完整分支和标签
+        if: steps.release_check.outputs.exists == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'
+
+      - name: 推送代码和标签到 AtomGit
+        if: steps.release_check.outputs.exists == 'true'
+        env:
+          ATOMGIT_GIT_HOST: ${{ vars.ATOMGIT_GIT_HOST || 'atomgit.com' }}
+          ATOMGIT_GIT_OWNER: ${{ vars.ATOMGIT_REPO_OWNER }}
+          ATOMGIT_GIT_REPO: ${{ vars.ATOMGIT_REPO_NAME }}
+          ATOMGIT_GIT_USERNAME: ${{ secrets.ATOMGIT_GIT_USERNAME }}
+          ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${ATOMGIT_GIT_OWNER}" ] || [ -z "${ATOMGIT_GIT_REPO}" ] || [ -z "${ATOMGIT_GIT_USERNAME}" ] || [ -z "${ATOMGIT_TOKEN}" ]; then
+            echo "缺少 AtomGit Git 同步所需变量或密钥。"
+            exit 1
+          fi
+
+          REMOTE_URL="https://${ATOMGIT_GIT_USERNAME}:${ATOMGIT_TOKEN}@${ATOMGIT_GIT_HOST}/${ATOMGIT_GIT_OWNER}/${ATOMGIT_GIT_REPO}.git"
+          git remote add atomgit "$REMOTE_URL"
+
+          while read -r ref; do
+            branch="${ref#refs/remotes/origin/}"
+            git push atomgit "${ref}:refs/heads/${branch}"
+          done < <(git for-each-ref --format='%(refname)' refs/remotes/origin | grep -v 'refs/remotes/origin/HEAD$')
+
+          git push atomgit 'refs/tags/*:refs/tags/*'
+
+      - name: 同步 AtomGit Release 与附件
+        if: steps.release_check.outputs.exists == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.event.repository.name }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          ATOMGIT_TOKEN: ${{ secrets.ATOMGIT_TOKEN }}
+          ATOMGIT_API_BASE: ${{ vars.ATOMGIT_API_BASE || 'https://api.atomgit.com' }}
+          ATOMGIT_OWNER: ${{ vars.ATOMGIT_REPO_OWNER || 'clickclaw'}}
+          ATOMGIT_REPO: ${{ vars.ATOMGIT_REPO_NAME || 'clickclaw'}}
+        run: node scripts/sync-atomgit-release.js
