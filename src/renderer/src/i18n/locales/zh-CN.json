@@ -1013,7 +1013,11 @@
       "feishuStreamingEnabled": "启用 streaming",
       "feishuStreamingEnabledHint": "开启后优先使用流式输出能力",
       "feishuBlockStreaming": "阻止下游继续流式输出",
-      "feishuBlockStreamingHint": "开启后会阻断下游 streaming，按完整消息返回"
+      "feishuBlockStreamingHint": "开启后会阻断下游 streaming，按完整消息返回",
+      "allowlistWarnings": {
+        "dmEmpty": "你选了白名单，但还没填用户 ID。后果：私聊消息会被拦截。",
+        "groupEmpty": "你选了群白名单，但群白名单和私聊白名单都为空。后果：群消息会被静默丢弃。"
+      }
     },
     "pickerDrawer": {
       "title": "选择聊天频道",

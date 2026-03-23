@@ -498,7 +498,30 @@ function normalizeRoles(input: unknown): string[] | undefined {
   return Array.from(new Set(roles)).sort((a, b) => a.localeCompare(b))
 }
 
-function buildBindingIdentityKey(match: Record<string, unknown>): string {
+function normalizeMatch(matchRaw: Record<string, unknown> | undefined): BindingConfig['match'] {
+  const match = matchRaw || {}
+  const channel = typeof match.channel === 'string' ? match.channel.trim() : ''
+  const accountId = typeof match.accountId === 'string' ? match.accountId.trim() : ''
+  const guildId = typeof match.guildId === 'string' ? match.guildId.trim() : ''
+  const teamId = typeof match.teamId === 'string' ? match.teamId.trim() : ''
+  const roles = normalizeRoles(match.roles)
+  const peerRaw = (match.peer || {}) as Record<string, unknown>
+  const peerKind = typeof peerRaw.kind === 'string' ? peerRaw.kind.trim().toLowerCase() : ''
+  const peerId = typeof peerRaw.id === 'string' ? peerRaw.id.trim() : ''
+  const next: BindingConfig['match'] = {
+    channel,
+  }
+  if (accountId) next.accountId = accountId
+  if (guildId) next.guildId = guildId
+  if (teamId) next.teamId = teamId
+  if (roles) next.roles = roles
+  if (peerKind && peerId && ['direct', 'group', 'channel', 'dm'].includes(peerKind)) {
+    next.peer = { kind: peerKind, id: peerId }
+  }
+  return next
+}
+
+function buildBindingIdentityKey(agentId: string, match: Record<string, unknown>): string {
   const peerRaw = (match.peer || {}) as Record<string, unknown>
   const peerKind = typeof peerRaw.kind === 'string' ? peerRaw.kind.trim().toLowerCase() : ''
   const peerId = typeof peerRaw.id === 'string' ? peerRaw.id.trim() : ''
@@ -507,22 +530,41 @@ function buildBindingIdentityKey(match: Record<string, unknown>): string {
   const accountId = typeof match.accountId === 'string' ? match.accountId.trim() : ''
   const guildId = typeof match.guildId === 'string' ? match.guildId.trim() : ''
   const teamId = typeof match.teamId === 'string' ? match.teamId.trim() : ''
-  return [channel, accountId, peerKind, peerId, guildId, teamId, roles].join('|')
+  const normalizedAgentId = agentId.trim().toLowerCase()
+  return [normalizedAgentId, channel, accountId, peerKind, peerId, guildId, teamId, roles].join('|')
 }
 
-function toRouteRule(binding: BindingConfig): BindingRouteRule {
+function computeRouteUiId(binding: BindingConfig, index: number): string {
+  const base = `${binding.agentId}|${buildBindingIdentityKey(binding.agentId, binding.match || {})}`
+  const encoded = Buffer.from(base).toString('base64url').slice(0, 12)
+  return `bind_${index}_${encoded}`
+}
+
+function toRouteRule(binding: BindingConfig, index: number): BindingRouteRule {
   const raw = binding as BindingRouteRule
   const id =
-    typeof raw.id === 'string' && raw.id.trim()
-      ? raw.id.trim()
-      : `bind_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  const priority = Number.isFinite(raw.priority) ? Number(raw.priority) : 0
+    typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : computeRouteUiId(binding, index)
+  const priority = Number.isFinite(raw.priority) ? Number(raw.priority) : index
   return {
-    ...binding,
+    ...sanitizeRouteBinding(binding),
     type: 'route',
     id,
     priority,
   }
+}
+
+function sanitizeRouteBinding(binding: BindingConfig): BindingConfig {
+  const agentId = typeof binding.agentId === 'string' ? binding.agentId.trim() : ''
+  const rawType = typeof binding.type === 'string' ? binding.type.trim().toLowerCase() : ''
+  const comment =
+    typeof binding.comment === 'string' && binding.comment.trim() ? binding.comment.trim() : ''
+  const next: BindingConfig = {
+    ...(rawType === 'route' ? { type: 'route' } : {}),
+    agentId,
+    match: normalizeMatch((binding.match || {}) as Record<string, unknown>),
+  }
+  if (comment) next.comment = comment
+  return next
 }
 
 /**
@@ -540,7 +582,7 @@ export function listBindingRules(): BindingRouteRule[] {
   const bindings = getBindings()
   return bindings
     .filter((binding) => isRouteBinding(binding as Record<string, unknown>))
-    .map((binding) => toRouteRule(binding))
+    .map((binding, index) => toRouteRule(binding, index))
 }
 
 /**
@@ -557,14 +599,21 @@ export function saveBindingRule(
   for (let i = 0; i < all.length; i += 1) {
     if (isRouteBinding(all[i] as Record<string, unknown>)) routeIndexes.push(i)
   }
-  const routeRules = routeIndexes.map((idx) => toRouteRule(all[idx] as BindingConfig))
+  const routeRules = routeIndexes.map((idx, routeIndex) =>
+    toRouteRule(all[idx] as BindingConfig, routeIndex)
+  )
 
-  const normalizedInput = toRouteRule({
+  const sanitizedInput = sanitizeRouteBinding({
     ...rule,
     match: { ...(rule.match || {}) },
     agentId: rule.agentId,
   } as BindingConfig)
-  const identityKey = buildBindingIdentityKey(normalizedInput.match || {})
+  const normalizedInput = toRouteRule(sanitizedInput, routeRules.length)
+  if (rule.id && rule.id.trim()) normalizedInput.id = rule.id.trim()
+  const identityKey = buildBindingIdentityKey(
+    normalizedInput.agentId,
+    (normalizedInput.match || {}) as Record<string, unknown>
+  )
 
   let targetIndex = -1
   if (rule.id && rule.id.trim()) {
@@ -572,7 +621,9 @@ export function saveBindingRule(
   }
   if (targetIndex < 0) {
     targetIndex = routeRules.findIndex(
-      (item) => buildBindingIdentityKey(item.match || {}) === identityKey
+      (item) =>
+        buildBindingIdentityKey(item.agentId, (item.match || {}) as Record<string, unknown>) ===
+        identityKey
     )
   }
 
@@ -593,12 +644,12 @@ export function saveBindingRule(
     if (isRouteBinding(item as Record<string, unknown>)) {
       const nextRule = routeRules[routeCursor]
       routeCursor += 1
-      return nextRule || item
+      return nextRule ? sanitizeRouteBinding(nextRule) : item
     }
     return item
   })
   if (routeCursor < routeRules.length) {
-    nextBindings.push(...routeRules.slice(routeCursor))
+    nextBindings.push(...routeRules.slice(routeCursor).map((item) => sanitizeRouteBinding(item)))
   }
 
   config.bindings = nextBindings
@@ -619,7 +670,7 @@ export function deleteBindingRule(id: string): void {
   const all = (config.bindings as BindingConfig[] | undefined) || []
   const next = all.filter((item) => {
     if (!isRouteBinding(item as Record<string, unknown>)) return true
-    const route = toRouteRule(item)
+    const route = toRouteRule(item, 0)
     return route.id !== normalizedId
   })
   config.bindings = next.length > 0 ? next : undefined
@@ -635,7 +686,7 @@ export function reorderBindingRules(ids: string[]): BindingRouteRule[] {
   const all = ((config.bindings as BindingConfig[] | undefined) || []).map((item) => ({ ...item }))
   const routeRules = all
     .filter((item) => isRouteBinding(item as Record<string, unknown>))
-    .map((item) => toRouteRule(item))
+    .map((item, index) => toRouteRule(item, index))
   if (routeRules.length === 0) return []
 
   const byId = new Map(routeRules.map((item) => [item.id, item] as const))
@@ -655,7 +706,7 @@ export function reorderBindingRules(ids: string[]): BindingRouteRule[] {
     if (!isRouteBinding(item as Record<string, unknown>)) return item
     const nextItem = ordered[cursor]
     cursor += 1
-    return nextItem || item
+    return nextItem ? sanitizeRouteBinding(nextItem) : item
   })
   config.bindings = nextBindings
   writeConfig(config, { source: 'auto', summary: `重排路由规则: ${ordered.length} 条` })

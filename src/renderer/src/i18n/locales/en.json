@@ -1011,7 +1011,11 @@
       "feishuStreamingEnabled": "Enable streaming",
       "feishuStreamingEnabledHint": "Prefer streaming responses when supported",
       "feishuBlockStreaming": "Block downstream streaming",
-      "feishuBlockStreamingHint": "Return full message instead of streaming chunks"
+      "feishuBlockStreamingHint": "Return full message instead of streaming chunks",
+      "allowlistWarnings": {
+        "dmEmpty": "Allowlist is enabled, but no user IDs are set. Result: DM messages will be blocked.",
+        "groupEmpty": "Group allowlist is enabled, but both group and DM allowlists are empty. Result: group messages will be silently dropped."
+      }
     },
     "pickerDrawer": {
       "title": "Select IM Channel",

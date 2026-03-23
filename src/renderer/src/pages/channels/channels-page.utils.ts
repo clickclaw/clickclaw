@@ -19,6 +19,11 @@ const CHANNEL_META_KEYS = new Set([
 
 export const VIRTUAL_DEFAULT_ACCOUNT_ID = 'default'
 
+function resolveDefaultGroupPolicy(preset: ChannelPresetForUI): GroupPolicy {
+  if (preset.groupPolicies.includes('open')) return 'open'
+  return preset.groupPolicies[0] ?? 'allowlist'
+}
+
 export function supportsGroupAllowFrom(preset: ChannelPresetForUI): boolean {
   return preset.supportsGroup && preset.key !== 'discord'
 }
@@ -132,7 +137,7 @@ export function configToForm(config: ChannelConfig, preset: ChannelPresetForUI):
     enabled: config.enabled !== false,
     dmPolicy: (config.dmPolicy as DmPolicy) ?? preset.dmPolicies[0] ?? 'pairing',
     allowFrom: Array.isArray(config.allowFrom) ? config.allowFrom.join('\n') : '',
-    groupPolicy: (config.groupPolicy as GroupPolicy) ?? preset.groupPolicies[0] ?? 'allowlist',
+    groupPolicy: (config.groupPolicy as GroupPolicy) ?? resolveDefaultGroupPolicy(preset),
     groupAllowFrom:
       canUseGroupAllowFrom && Array.isArray(config.groupAllowFrom)
         ? config.groupAllowFrom.join('\n')
@@ -170,7 +175,7 @@ export function formToConfig(
               .map((s) => s.trim())
               .filter(Boolean)
           : [],
-    groupPolicy: values.groupPolicy ?? preset.groupPolicies[0],
+    groupPolicy: values.groupPolicy ?? resolveDefaultGroupPolicy(preset),
   }
 
   if (canUseGroupAllowFrom) {
