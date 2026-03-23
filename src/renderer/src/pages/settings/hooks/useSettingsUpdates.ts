@@ -19,7 +19,7 @@ export function useSettingsUpdates({ t, onSuccess, onError }: UseSettingsUpdates
   const logEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.api.update.onStatusChanged(setUpdateInfo)
+    const offUpdateStatus = window.api.update.onStatusChanged(setUpdateInfo)
     window.api.update.getInfo().then(setUpdateInfo)
 
     window.api.openclawUpdate.onLog((line) => {
@@ -27,6 +27,7 @@ export function useSettingsUpdates({ t, onSuccess, onError }: UseSettingsUpdates
     })
 
     return () => {
+      offUpdateStatus()
       window.api.openclawUpdate.offLog()
     }
   }, [])

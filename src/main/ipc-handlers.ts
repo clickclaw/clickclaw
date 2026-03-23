@@ -566,8 +566,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('update:download', () => {
     downloadUpdate()
   })
-  ipcMain.handle('update:install', () => {
-    quitAndInstall()
+  ipcMain.handle('update:install', async () => {
+    await quitAndInstall()
   })
 
   // ========== OpenClaw 版本升级 ==========

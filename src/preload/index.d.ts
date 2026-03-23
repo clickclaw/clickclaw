@@ -555,7 +555,7 @@ declare global {
       /** 退出并安装（downloaded 状态时有效） */
       install: () => Promise<void>
       /** 订阅状态推送（主进程 → renderer） */
-      onStatusChanged: (callback: (info: UpdateInfo) => void) => void
+      onStatusChanged: (callback: (info: UpdateInfo) => void) => () => void
     }
 
     /** Agent 管理 */

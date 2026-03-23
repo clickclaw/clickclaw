@@ -67,12 +67,13 @@ export default function TrayPopupPage(): React.ReactElement {
       setLoading(null)
     })
 
-    window.api.update.onStatusChanged((info) => {
+    const offUpdateStatus = window.api.update.onStatusChanged((info) => {
       setUpdateInfo(info as UpdateInfo)
     })
 
     return () => {
       offStateChange()
+      offUpdateStatus()
     }
   }, [])
 

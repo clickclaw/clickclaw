@@ -96,8 +96,10 @@ const api = {
     check: (): Promise<void> => ipcRenderer.invoke('update:check'),
     download: (): Promise<void> => ipcRenderer.invoke('update:download'),
     install: (): Promise<void> => ipcRenderer.invoke('update:install'),
-    onStatusChanged: (callback: (info: unknown) => void): void => {
-      ipcRenderer.on('update:status-changed', (_event, info) => callback(info))
+    onStatusChanged: (callback: (info: unknown) => void): (() => void) => {
+      const listener = (_event: unknown, info: unknown): void => callback(info)
+      ipcRenderer.on('update:status-changed', listener)
+      return () => ipcRenderer.removeListener('update:status-changed', listener)
     },
   },
 

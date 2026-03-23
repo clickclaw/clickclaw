@@ -352,6 +352,7 @@ export class GatewayProcess {
     this.setState('stopping')
 
     if (this.proc && this.proc.exitCode === null) {
+      const childPid = this.proc.pid
       // 先发 SIGTERM，给进程清理时间
       this.proc.kill('SIGTERM')
 
@@ -361,6 +362,17 @@ export class GatewayProcess {
         log.warn('SIGTERM timeout, sending SIGKILL')
         this.proc.kill('SIGKILL')
         await this.waitForExit(2000)
+      }
+
+      // 兜底：Windows 上信号终止不一定覆盖子进程树，最终强杀整棵树
+      if (this.proc && this.proc.exitCode === null && childPid && childPid > 0) {
+        try {
+          log.warn(`stop fallback: force terminate process tree pid=${childPid}`)
+          await terminateProcessTree(childPid)
+          await this.waitForExit(2000)
+        } catch (err) {
+          log.warn(`stop fallback failed pid=${childPid}:`, err)
+        }
       }
     }
 
