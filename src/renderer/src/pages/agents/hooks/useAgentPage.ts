@@ -11,6 +11,8 @@ export function useAgentPage() {
     agents: listState.agents,
     loadAgents: listState.loadAgents,
     setSelectedId: listState.setSelectedId,
+    wsReady,
+    callRpc,
   })
 
   return {

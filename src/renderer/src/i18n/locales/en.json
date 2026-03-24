@@ -215,9 +215,123 @@
         }
       }
     },
+    "next": {
+      "title": "Next Suggested Action",
+      "progress": "Core setup progress: {{done}} / {{total}}",
+      "gateway": {
+        "title": "Start the service engine first",
+        "desc": "This is required before chat and automation can run.",
+        "cta": "Start service"
+      },
+      "model": {
+        "title": "Configure a default model",
+        "desc": "Set at least one working model before using chat or tasks.",
+        "cta": "Configure model"
+      },
+      "agent": {
+        "title": "Create your first agent",
+        "desc": "Give your AI a clear role, then expand by scenario later.",
+        "cta": "Create agent"
+      },
+      "chat": {
+        "title": "You're ready to use",
+        "desc": "Core setup is complete. Start with your first message in chat.",
+        "cta": "Start chat"
+      }
+    },
+    "modules": {
+      "ready": "Ready",
+      "needSetup": "Needs setup",
+      "optional": "Optional",
+      "optionalDone": "Connected",
+      "chat": {
+        "title": "Start Chat",
+        "desc": "Talk with AI directly in the app",
+        "summaryReady": "Model and service engine are ready",
+        "summaryPending": "Start service and configure a model first"
+      },
+      "model": {
+        "title": "Model Settings",
+        "desc": "Configure providers and default model",
+        "summaryPending": "No default model configured"
+      },
+      "channels": {
+        "title": "Chat Channels",
+        "desc": "Connect Feishu, WeCom, and other IM channels",
+        "summaryPending": "No channel connected yet"
+      },
+      "agents": {
+        "title": "Agent Management",
+        "desc": "Create assistants for different roles",
+        "summaryPending": "No agent created yet",
+        "summaryCount": "{{count}} agent(s) created (no default selected)"
+      },
+      "cron": {
+        "title": "Automation Tasks",
+        "desc": "View scheduled task run records",
+        "needAttention": "Has failures",
+        "summary": "Enabled {{enabled}} / Total {{total}}",
+        "noRecord": "No run record yet",
+        "none": "None",
+        "justNow": "just now",
+        "minutesAgo": "{{n}} min ago",
+        "inMinutes": "in {{n}} min",
+        "hoursAgo": "{{n}} h ago",
+        "inHours": "in {{n}} h",
+        "daysAgo": "{{n}} d ago",
+        "inDays": "in {{n}} d",
+        "statusOk": "Success",
+        "statusError": "Failed",
+        "statusSkipped": "Skipped",
+        "latestRun": "Latest: {{name}} · {{when}} · {{status}}",
+        "nextRun": "Next: {{when}}"
+      }
+    },
+    "scenarios": {
+      "title": "Common Scenarios",
+      "subtitle": "Operate by task, not by complex metrics"
+    },
+    "queue": {
+      "title": "Action Queue",
+      "subtitle": "These issues directly block availability",
+      "empty": "No pending item right now. You can start using it directly.",
+      "gateway": {
+        "title": "Service engine is not started",
+        "desc": "Chat and automation are unavailable until it starts.",
+        "cta": "Start now"
+      },
+      "model": {
+        "title": "No default model configured",
+        "desc": "Set a default model before chat and tasks can run.",
+        "cta": "Configure"
+      },
+      "agent": {
+        "title": "No agent created yet",
+        "desc": "Create one general-purpose agent first, then expand by scenario.",
+        "cta": "Create"
+      },
+      "cronFailure": {
+        "title": "Automation has failed runs",
+        "desc": "{{count}} recent failures detected. Check task settings soon.",
+        "cta": "Check"
+      }
+    },
+    "runs": {
+      "title": "Automation Run Records",
+      "subtitle": "Shows recent runs and next scheduled trigger",
+      "viewAll": "View all",
+      "empty": "No task records to display yet",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "noLast": "No previous run",
+      "noNext": "No next schedule",
+      "lastAt": "Last: {{status}} · {{when}}",
+      "nextAt": "Next: {{when}}"
+    },
     "quickActions": {
       "chat": "Start Chat",
       "agents": "Manage Agents",
+      "cron": "Automation",
       "logs": "View Logs"
     },
     "channelNames": {
@@ -289,6 +403,11 @@
     "agent": {
       "label": "Agent"
     },
+    "entry": {
+      "prefilledAgentHint": "Entered chat with agent {{name}}",
+      "invalidAgentFallback": "The specified agent does not exist. Switched to the default agent.",
+      "noDefaultAgent": "No default agent is set. Please choose an agent first."
+    },
     "display": {
       "thinking": "Thinking",
       "tools": "Tools",
@@ -318,6 +437,7 @@
       "newSessionAgentPlaceholder": "Select Agent",
       "newSessionNameRequired": "Please enter a session name",
       "newSessionSuccess": "Session created",
+      "newSessionWithAgentSuccess": "Session created. Default agent: {{name}}",
       "deleteConfirmTitle": "Delete Session",
       "deleteConfirmContent": "Delete session \"{{label}}\"? This cannot be undone.",
       "deleteSuccess": "Session deleted",
@@ -532,14 +652,67 @@
     "setDefaultSuccess": "Set as default agent",
     "saveSuccess": "Agent saved",
     "saveFailed": "Save failed: {{error}}",
+    "actions": {
+      "openChat": "Go to Live Chat"
+    },
     "mainSessionProtected": "Built-in main agent cannot be deleted",
     "noSelection": "Select an agent",
     "noSelectionHint": "Select an agent from the list on the left to view details or edit files",
     "tabs": {
       "overview": "Overview",
+      "channels": "Channels",
+      "cron": "Cron",
       "files": "Files",
       "tools": "Tools",
       "skills": "Skills"
+    },
+    "channels": {
+      "globalHint": "This tab shows global channel status and marks bindings related to the current agent.",
+      "openManage": "Manage Channels",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "boundCurrent": "Bound to current agent",
+      "unbound": "Unbound",
+      "quickBind": "Bind Current",
+      "quickUnbind": "Unbind",
+      "bindSuccess": "Bound to current agent",
+      "unbindSuccess": "Binding removed",
+      "bindFailed": "Binding failed: {{error}}",
+      "noAccount": "No account",
+      "empty": "No channels configured",
+      "loadFailed": "Failed to load channels: {{error}}",
+      "summary": {
+        "total": "Total entries: {{count}}",
+        "enabled": "Enabled: {{count}}",
+        "bound": "Bound to this agent: {{count}}"
+      },
+      "table": {
+        "channel": "Channel",
+        "account": "Account",
+        "status": "Status",
+        "binding": "Binding",
+        "action": "Action"
+      }
+    },
+    "cron": {
+      "filterHint": "This tab only shows cron jobs related to the current agent (filtered by agentId).",
+      "openManage": "Manage Cron",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "statusOk": "Success",
+      "statusError": "Failed",
+      "statusSkipped": "Skipped",
+      "schedule": "Schedule",
+      "lastRun": "Last run",
+      "nextRun": "Next run",
+      "empty": "No cron jobs for this agent",
+      "wsRequired": "Gateway connection is required to load cron jobs",
+      "loadFailed": "Failed to load cron jobs: {{error}}",
+      "summary": {
+        "total": "Total jobs: {{count}}",
+        "enabled": "Enabled: {{count}}",
+        "failed": "Recent failures: {{count}}"
+      }
     },
     "overview": {
       "modelLabel": "Model",
@@ -680,6 +853,74 @@
   },
   "channels": {
     "title": "IM Channel Configuration",
+    "bindingRules": {
+      "open": "Routing Rules",
+      "title": "Routing Rules (Advanced)",
+      "add": "Add a Rule",
+      "refresh": "Refresh",
+      "empty": "No rules yet. Add one to get started.",
+      "createTitle": "New Rule",
+      "editTitle": "Edit Rule",
+      "created": "Rule added",
+      "updated": "Rule updated",
+      "deleted": "Rule deleted",
+      "deleteConfirmTitle": "Delete this rule now?",
+      "intro": {
+        "title": "This feature routes messages automatically",
+        "description": "Step 1: choose the target agent. Step 2: choose the source channel. Account is optional. Messages from different channels/accounts will then be routed automatically."
+      },
+      "table": {
+        "order": "Order",
+        "agent": "Agent",
+        "channel": "Channel",
+        "accountId": "Account ID",
+        "priority": "Priority",
+        "match": "When It Matches",
+        "actions": "Actions",
+        "actionsMoveUp": "Move up",
+        "actionsMoveDown": "Move down",
+        "actionsEdit": "Edit",
+        "actionsDelete": "Delete",
+        "matchSummary": {
+          "default": "Match by channel + account",
+          "peer": "Chat target: {{kind}} ({{id}})",
+          "guild": "Guild: {{id}}",
+          "team": "Team: {{id}}",
+          "roles": "Roles: {{ids}}",
+          "separator": "; "
+        }
+      },
+      "form": {
+        "agent": "Which agent should handle this",
+        "agentRequired": "Please select an agent",
+        "agentHint": "Pick your usual default agent in most cases",
+        "channel": "Where messages come from",
+        "channelRequired": "Please select a channel",
+        "channelHint": "For example: WeChat, Feishu, WeCom",
+        "accountId": "Which account to receive messages (optional)",
+        "accountIdHint": "Leave empty to use this channel's default account",
+        "accountIdPlaceholder": "Pick an existing account or type one; leave empty for default account",
+        "defaultAccountTag": "default",
+        "priority": "Priority (smaller number matches first)",
+        "priorityHint": "Usually keep it at 0; adjust only when you have multiple rules",
+        "advancedTitle": "Advanced Conditions (Optional)",
+        "moreAdvancedTitle": "More Filters (Advanced, Optional)",
+        "peerHint": "Chat target is optional. Most users can leave it empty unless they need per-user/group routing.",
+        "peerKind": "Chat Target Type (Optional)",
+        "peerKindOptions": {
+          "direct": "Direct",
+          "group": "Group",
+          "channel": "Channel",
+          "dm": "DM"
+        },
+        "peerId": "Chat Target ID (Optional)",
+        "peerIdPlaceholder": "e.g. a user/group/channel id",
+        "guildId": "Guild ID",
+        "teamId": "Team ID",
+        "roles": "Role IDs (Optional)",
+        "rolesPlaceholder": "Separate multiple role IDs by comma or newline"
+      }
+    },
     "addChannel": "Add IM Channel",
     "channelCount": "{{count}} IM channels",
     "noChannels": "No IM channels yet",
@@ -786,7 +1027,11 @@
       "feishuStreamingEnabled": "Enable streaming",
       "feishuStreamingEnabledHint": "Prefer streaming responses when supported",
       "feishuBlockStreaming": "Block downstream streaming",
-      "feishuBlockStreamingHint": "Return full message instead of streaming chunks"
+      "feishuBlockStreamingHint": "Return full message instead of streaming chunks",
+      "allowlistWarnings": {
+        "dmEmpty": "Allowlist is enabled, but no user IDs are set. Result: DM messages will be blocked.",
+        "groupEmpty": "Group allowlist is enabled, but both group and DM allowlists are empty. Result: group messages will be silently dropped."
+      }
     },
     "pickerDrawer": {
       "title": "Select IM Channel",

@@ -1,8 +1,9 @@
-import { Button, Skeleton } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { Button, Skeleton, Space } from 'antd'
+import { PlusOutlined, PartitionOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import PageHeader from '../../components/PageHeader'
 import { AccountConfigDrawer } from './components/AccountConfigDrawer'
+import { BindingRulesDrawer } from './components/BindingRulesDrawer'
 import { ChannelCard } from './components/ChannelCard'
 import { ChannelConfigDrawer } from './components/ChannelConfigDrawer'
 import { ChannelPickerDrawer } from './components/ChannelPickerDrawer'
@@ -16,6 +17,11 @@ export default function ChannelsPage(): React.ReactElement {
     channels,
     agents,
     bindings,
+    bindingRules,
+    bindingRulesOpen,
+    setBindingRulesOpen,
+    bindingRulesLoading,
+    loadBindingRules,
     loading,
     pickerOpen,
     setPickerOpen,
@@ -64,14 +70,19 @@ export default function ChannelsPage(): React.ReactElement {
             : undefined
         }
         extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAddChannel}
-            style={{ background: '#FF4D2A', borderColor: '#FF4D2A', fontWeight: 500 }}
-          >
-            {t('channels.addChannel')}
-          </Button>
+          <Space>
+            <Button icon={<PartitionOutlined />} onClick={() => setBindingRulesOpen(true)}>
+              {t('channels.bindingRules.open')}
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAddChannel}
+              style={{ background: '#FF4D2A', borderColor: '#FF4D2A', fontWeight: 500 }}
+            >
+              {t('channels.addChannel')}
+            </Button>
+          </Space>
         }
       />
 
@@ -157,6 +168,17 @@ export default function ChannelsPage(): React.ReactElement {
         }}
         onSave={handleSaveAccount}
         saving={accountSaving}
+      />
+
+      <BindingRulesDrawer
+        open={bindingRulesOpen}
+        rules={bindingRules}
+        loading={bindingRulesLoading}
+        agents={agents}
+        channels={channels}
+        presets={allPresets}
+        onClose={() => setBindingRulesOpen(false)}
+        onRefresh={loadBindingRules}
       />
     </div>
   )

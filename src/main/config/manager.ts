@@ -479,6 +479,94 @@ export interface BindingConfig {
   [key: string]: unknown
 }
 
+export interface BindingRouteRule extends BindingConfig {
+  id: string
+  type?: 'route'
+  priority?: number
+}
+
+function isRouteBinding(binding: Record<string, unknown> | undefined): boolean {
+  if (!binding || typeof binding !== 'object') return false
+  const rawType = typeof binding.type === 'string' ? binding.type.trim().toLowerCase() : ''
+  return rawType === '' || rawType === 'route'
+}
+
+function normalizeRoles(input: unknown): string[] | undefined {
+  if (!Array.isArray(input)) return undefined
+  const roles = input.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+  if (roles.length === 0) return undefined
+  return Array.from(new Set(roles)).sort((a, b) => a.localeCompare(b))
+}
+
+function normalizeMatch(matchRaw: Record<string, unknown> | undefined): BindingConfig['match'] {
+  const match = matchRaw || {}
+  const channel = typeof match.channel === 'string' ? match.channel.trim() : ''
+  const accountId = typeof match.accountId === 'string' ? match.accountId.trim() : ''
+  const guildId = typeof match.guildId === 'string' ? match.guildId.trim() : ''
+  const teamId = typeof match.teamId === 'string' ? match.teamId.trim() : ''
+  const roles = normalizeRoles(match.roles)
+  const peerRaw = (match.peer || {}) as Record<string, unknown>
+  const peerKind = typeof peerRaw.kind === 'string' ? peerRaw.kind.trim().toLowerCase() : ''
+  const peerId = typeof peerRaw.id === 'string' ? peerRaw.id.trim() : ''
+  const next: BindingConfig['match'] = {
+    channel,
+  }
+  if (accountId) next.accountId = accountId
+  if (guildId) next.guildId = guildId
+  if (teamId) next.teamId = teamId
+  if (roles) next.roles = roles
+  if (peerKind && peerId && ['direct', 'group', 'channel', 'dm'].includes(peerKind)) {
+    next.peer = { kind: peerKind, id: peerId }
+  }
+  return next
+}
+
+function buildBindingIdentityKey(agentId: string, match: Record<string, unknown>): string {
+  const peerRaw = (match.peer || {}) as Record<string, unknown>
+  const peerKind = typeof peerRaw.kind === 'string' ? peerRaw.kind.trim().toLowerCase() : ''
+  const peerId = typeof peerRaw.id === 'string' ? peerRaw.id.trim() : ''
+  const roles = normalizeRoles(match.roles)?.join(',') || ''
+  const channel = typeof match.channel === 'string' ? match.channel.trim().toLowerCase() : ''
+  const accountId = typeof match.accountId === 'string' ? match.accountId.trim() : ''
+  const guildId = typeof match.guildId === 'string' ? match.guildId.trim() : ''
+  const teamId = typeof match.teamId === 'string' ? match.teamId.trim() : ''
+  const normalizedAgentId = agentId.trim().toLowerCase()
+  return [normalizedAgentId, channel, accountId, peerKind, peerId, guildId, teamId, roles].join('|')
+}
+
+function computeRouteUiId(binding: BindingConfig, index: number): string {
+  const base = `${binding.agentId}|${buildBindingIdentityKey(binding.agentId, binding.match || {})}`
+  const encoded = Buffer.from(base).toString('base64url').slice(0, 12)
+  return `bind_${index}_${encoded}`
+}
+
+function toRouteRule(binding: BindingConfig, index: number): BindingRouteRule {
+  const raw = binding as BindingRouteRule
+  const id =
+    typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : computeRouteUiId(binding, index)
+  const priority = Number.isFinite(raw.priority) ? Number(raw.priority) : index
+  return {
+    ...sanitizeRouteBinding(binding),
+    type: 'route',
+    id,
+    priority,
+  }
+}
+
+function sanitizeRouteBinding(binding: BindingConfig): BindingConfig {
+  const agentId = typeof binding.agentId === 'string' ? binding.agentId.trim() : ''
+  const rawType = typeof binding.type === 'string' ? binding.type.trim().toLowerCase() : ''
+  const comment =
+    typeof binding.comment === 'string' && binding.comment.trim() ? binding.comment.trim() : ''
+  const next: BindingConfig = {
+    ...(rawType === 'route' ? { type: 'route' } : {}),
+    agentId,
+    match: normalizeMatch((binding.match || {}) as Record<string, unknown>),
+  }
+  if (comment) next.comment = comment
+  return next
+}
+
 /**
  * 获取所有 binding 配置
  */
@@ -488,49 +576,167 @@ export function getBindings(): BindingConfig[] {
 }
 
 /**
+ * 列出 route 规则（用于高级路由编辑）
+ */
+export function listBindingRules(): BindingRouteRule[] {
+  const bindings = getBindings()
+  return bindings
+    .filter((binding) => isRouteBinding(binding as Record<string, unknown>))
+    .map((binding, index) => toRouteRule(binding, index))
+}
+
+/**
+ * 保存 route 规则
+ * - 传入 id：按 id 更新
+ * - 不传 id：若 identityKey 命中则覆盖；否则新增
+ */
+export function saveBindingRule(
+  rule: Omit<BindingRouteRule, 'id'> & { id?: string }
+): BindingRouteRule {
+  const config = readConfig()
+  const all = ((config.bindings as BindingConfig[] | undefined) || []).map((item) => ({ ...item }))
+  const routeIndexes: number[] = []
+  for (let i = 0; i < all.length; i += 1) {
+    if (isRouteBinding(all[i] as Record<string, unknown>)) routeIndexes.push(i)
+  }
+  const routeRules = routeIndexes.map((idx, routeIndex) =>
+    toRouteRule(all[idx] as BindingConfig, routeIndex)
+  )
+
+  const sanitizedInput = sanitizeRouteBinding({
+    ...rule,
+    match: { ...(rule.match || {}) },
+    agentId: rule.agentId,
+  } as BindingConfig)
+  const normalizedInput = toRouteRule(sanitizedInput, routeRules.length)
+  if (rule.id && rule.id.trim()) normalizedInput.id = rule.id.trim()
+  const identityKey = buildBindingIdentityKey(
+    normalizedInput.agentId,
+    (normalizedInput.match || {}) as Record<string, unknown>
+  )
+
+  let targetIndex = -1
+  if (rule.id && rule.id.trim()) {
+    targetIndex = routeRules.findIndex((item) => item.id === rule.id!.trim())
+  }
+  if (targetIndex < 0) {
+    targetIndex = routeRules.findIndex(
+      (item) =>
+        buildBindingIdentityKey(item.agentId, (item.match || {}) as Record<string, unknown>) ===
+        identityKey
+    )
+  }
+
+  if (targetIndex >= 0) {
+    routeRules[targetIndex] = {
+      ...routeRules[targetIndex],
+      ...normalizedInput,
+      id: routeRules[targetIndex].id,
+      type: 'route',
+    }
+  } else {
+    routeRules.push(normalizedInput)
+  }
+
+  // 保持非 route 条目原位，仅替换 route 序列
+  let routeCursor = 0
+  const nextBindings: BindingConfig[] = all.map((item) => {
+    if (isRouteBinding(item as Record<string, unknown>)) {
+      const nextRule = routeRules[routeCursor]
+      routeCursor += 1
+      return nextRule ? sanitizeRouteBinding(nextRule) : item
+    }
+    return item
+  })
+  if (routeCursor < routeRules.length) {
+    nextBindings.push(...routeRules.slice(routeCursor).map((item) => sanitizeRouteBinding(item)))
+  }
+
+  config.bindings = nextBindings
+  writeConfig(config, {
+    source: 'auto',
+    summary: `保存路由规则: ${normalizedInput.match.channel || 'unknown'} -> ${normalizedInput.agentId}`,
+  })
+  return targetIndex >= 0 ? routeRules[targetIndex] : routeRules[routeRules.length - 1]
+}
+
+/**
+ * 删除 route 规则（按 id）
+ */
+export function deleteBindingRule(id: string): void {
+  const normalizedId = id.trim()
+  if (!normalizedId) return
+  const config = readConfig()
+  const all = (config.bindings as BindingConfig[] | undefined) || []
+  const next = all.filter((item) => {
+    if (!isRouteBinding(item as Record<string, unknown>)) return true
+    const route = toRouteRule(item, 0)
+    return route.id !== normalizedId
+  })
+  config.bindings = next.length > 0 ? next : undefined
+  writeConfig(config, { source: 'auto', summary: `删除路由规则: ${normalizedId}` })
+}
+
+/**
+ * 重排 route 规则顺序（仅 route，非 route 保持原位置）
+ */
+export function reorderBindingRules(ids: string[]): BindingRouteRule[] {
+  const normalizedIds = ids.map((id) => id.trim()).filter(Boolean)
+  const config = readConfig()
+  const all = ((config.bindings as BindingConfig[] | undefined) || []).map((item) => ({ ...item }))
+  const routeRules = all
+    .filter((item) => isRouteBinding(item as Record<string, unknown>))
+    .map((item, index) => toRouteRule(item, index))
+  if (routeRules.length === 0) return []
+
+  const byId = new Map(routeRules.map((item) => [item.id, item] as const))
+  const ordered: BindingRouteRule[] = []
+  for (const id of normalizedIds) {
+    const item = byId.get(id)
+    if (!item) continue
+    ordered.push(item)
+    byId.delete(id)
+  }
+  for (const item of routeRules) {
+    if (byId.has(item.id)) ordered.push(item)
+  }
+
+  let cursor = 0
+  const nextBindings = all.map((item) => {
+    if (!isRouteBinding(item as Record<string, unknown>)) return item
+    const nextItem = ordered[cursor]
+    cursor += 1
+    return nextItem ? sanitizeRouteBinding(nextItem) : item
+  })
+  config.bindings = nextBindings
+  writeConfig(config, { source: 'auto', summary: `重排路由规则: ${ordered.length} 条` })
+  return ordered
+}
+
+/**
  * 保存或更新 binding（channel + accountId 相同时覆盖）
  */
 export function saveBinding(agentId: string, channel: string, accountId: string): void {
-  const config = readConfig()
-  if (!config.bindings) config.bindings = []
-
-  const bindings = config.bindings as BindingConfig[]
-  const idx = bindings.findIndex(
-    (b) => b.match?.channel === channel && b.match?.accountId === accountId
-  )
-
-  const newBinding: BindingConfig = {
+  saveBindingRule({
+    type: 'route',
     agentId,
     match: { channel, accountId },
-  }
-
-  if (idx >= 0) {
-    bindings[idx] = newBinding
-  } else {
-    bindings.push(newBinding)
-  }
-
-  config.bindings = bindings
-  writeConfig(config, {
-    source: 'auto',
-    summary: `设置路由绑定: ${channel}/${accountId} → ${agentId}`,
   })
+  const accountLabel = accountId || 'default'
   log.info(`binding set: ${channel}/${accountId} → ${agentId}`)
+  log.debug(`binding normalized via rule save: ${channel}/${accountLabel} -> ${agentId}`)
 }
 
 /**
  * 删除指定 channel + accountId 对应的 binding
  */
 export function deleteBinding(channel: string, accountId: string): void {
-  const config = readConfig()
-  if (!config.bindings) return
-
-  const bindings = config.bindings as BindingConfig[]
-  config.bindings = bindings.filter(
-    (b) => !(b.match?.channel === channel && b.match?.accountId === accountId)
+  const rules = listBindingRules()
+  const target = rules.find(
+    (rule) => rule.match?.channel === channel && (rule.match?.accountId || '') === accountId
   )
-
-  writeConfig(config, { source: 'auto', summary: `删除路由绑定: ${channel}/${accountId}` })
+  if (!target) return
+  deleteBindingRule(target.id)
   log.info(`binding deleted: ${channel}/${accountId}`)
 }
 

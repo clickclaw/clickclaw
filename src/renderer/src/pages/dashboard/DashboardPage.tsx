@@ -13,12 +13,12 @@ import {
   PlayCircleOutlined,
   PoweroffOutlined,
   ReloadOutlined,
-  ThunderboltOutlined,
-  RobotOutlined,
-  ApiOutlined,
   ArrowRightOutlined,
   FileTextOutlined,
   GlobalOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -33,6 +33,41 @@ interface DashStats {
   defaultAgent: string | null
   channelCount: number
   channelNames: string[]
+  cronTotal: number
+  cronEnabled: number
+  cronFailed: number
+  cronLatestName: string | null
+  cronLatestStatus: 'ok' | 'error' | 'skipped' | null
+  cronLatestAt: number | null
+  cronNextAt: number | null
+}
+
+interface DashCronJob {
+  id: string
+  name: string
+  enabled: boolean
+  state?: {
+    nextRunAtMs?: number
+    lastRunAtMs?: number
+    lastRunStatus?: 'ok' | 'error' | 'skipped'
+  }
+  lastRun?: {
+    status: 'ok' | 'error' | 'skipped'
+    startedAt: number
+  }
+  lastRunAt?: number
+  lastRunStatus?: 'ok' | 'error' | 'skipped'
+  nextRunAt?: number
+  nextRunAtMs?: number
+}
+
+interface DashCronTimelineItem {
+  id: string
+  name: string
+  enabled: boolean
+  lastStatus: 'ok' | 'error' | 'skipped' | null
+  lastAt: number | null
+  nextAt: number | null
 }
 
 // ========== 日志工具 ==========
@@ -56,6 +91,18 @@ function logLevel(line: string): 'error' | 'warn' | 'info' | 'debug' {
   if (l.includes('"level":"warn"') || / warn[: ]/.test(l)) return 'warn'
   if (l.includes('"level":"debug"') || / debug[: ]/.test(l)) return 'debug'
   return 'info'
+}
+
+function pickLastRunAt(job: DashCronJob): number | null {
+  return job.state?.lastRunAtMs ?? job.lastRunAt ?? job.lastRun?.startedAt ?? null
+}
+
+function pickNextRunAt(job: DashCronJob): number | null {
+  return job.state?.nextRunAtMs ?? job.nextRunAtMs ?? job.nextRunAt ?? null
+}
+
+function pickLastRunStatus(job: DashCronJob): 'ok' | 'error' | 'skipped' | null {
+  return job.state?.lastRunStatus ?? job.lastRunStatus ?? job.lastRun?.status ?? null
 }
 
 // 语义日志色（深色背景版，与 LogsPage 保持一致）
@@ -104,7 +151,7 @@ function DashboardPage(): React.ReactElement {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { token } = theme.useToken()
-  const { gwState, gwPort } = useGatewayContext()
+  const { gwState, gwPort, status, callRpc } = useGatewayContext()
 
   const isRunning = gwState === 'running'
   const isStarting = gwState === 'starting'
@@ -119,12 +166,46 @@ function DashboardPage(): React.ReactElement {
     defaultAgent: null,
     channelCount: 0,
     channelNames: [],
+    cronTotal: 0,
+    cronEnabled: 0,
+    cronFailed: 0,
+    cronLatestName: null,
+    cronLatestStatus: null,
+    cronLatestAt: null,
+    cronNextAt: null,
   })
   const [statsLoading, setStatsLoading] = useState(true)
+  const [cronJobs, setCronJobs] = useState<DashCronJob[]>([])
   const [logExpanded, setLogExpanded] = useState(false)
   const [guideMode, setGuideMode] = useState<'auto' | 'always' | 'hidden'>('auto')
   const [hasGatewayStartedOnce, setHasGatewayStartedOnce] = useState(false)
   const [guideExpanded, setGuideExpanded] = useState(false)
+
+  const formatWhen = useCallback(
+    (timestampMs: number | null): string => {
+      if (!timestampMs) return t('dashboard.modules.cron.none')
+      const delta = Date.now() - timestampMs
+      const abs = Math.abs(delta)
+      if (abs < 60_000) return t('dashboard.modules.cron.justNow')
+      if (abs < 3_600_000) {
+        const n = Math.floor(abs / 60_000)
+        return delta >= 0
+          ? t('dashboard.modules.cron.minutesAgo', { n })
+          : t('dashboard.modules.cron.inMinutes', { n })
+      }
+      if (abs < 86_400_000) {
+        const n = Math.floor(abs / 3_600_000)
+        return delta >= 0
+          ? t('dashboard.modules.cron.hoursAgo', { n })
+          : t('dashboard.modules.cron.inHours', { n })
+      }
+      const n = Math.floor(abs / 86_400_000)
+      return delta >= 0
+        ? t('dashboard.modules.cron.daysAgo', { n })
+        : t('dashboard.modules.cron.inDays', { n })
+    },
+    [t]
+  )
 
   useEffect(() => {
     window.api.appState
@@ -155,6 +236,19 @@ function DashboardPage(): React.ReactElement {
         window.api.channel.list().catch(() => ({})),
       ])
 
+      let cronJobs: DashCronJob[] = []
+      if (gwState === 'running' && status === 'ready') {
+        try {
+          const result = (await callRpc('cron.list', { limit: 20, offset: 0 })) as {
+            jobs?: DashCronJob[]
+          }
+          cronJobs = Array.isArray(result?.jobs) ? result.jobs : []
+        } catch {
+          // Gateway 未就绪或未启用 cron 时静默降级
+        }
+      }
+      setCronJobs(cronJobs)
+
       const providerCount = Object.keys(providers as Record<string, unknown>).length
       const defaultModelStr =
         defaultModel == null
@@ -180,6 +274,27 @@ function DashboardPage(): React.ReactElement {
       const channelMap = channels as Record<string, { enabled?: boolean }>
       const enabledChannels = Object.entries(channelMap).filter(([, v]) => v?.enabled !== false)
 
+      const cronEnabled = cronJobs.filter((j) => j.enabled).length
+      const cronFailed = cronJobs.filter((j) => pickLastRunStatus(j) === 'error').length
+
+      let cronLatestJob: DashCronJob | null = null
+      let latestAt = 0
+      for (const job of cronJobs) {
+        const runAt = pickLastRunAt(job)
+        if (runAt && runAt > latestAt) {
+          latestAt = runAt
+          cronLatestJob = job
+        }
+      }
+
+      let cronNextAt: number | null = null
+      for (const job of cronJobs) {
+        if (!job.enabled) continue
+        const next = pickNextRunAt(job)
+        if (!next) continue
+        if (cronNextAt === null || next < cronNextAt) cronNextAt = next
+      }
+
       setStats({
         providerCount,
         defaultModel: defaultModelStr,
@@ -189,16 +304,43 @@ function DashboardPage(): React.ReactElement {
         channelNames: enabledChannels
           .map(([k]) => t(`dashboard.channelNames.${k}`, { defaultValue: k }))
           .slice(0, 3),
+        cronTotal: cronJobs.length,
+        cronEnabled,
+        cronFailed,
+        cronLatestName: cronLatestJob?.name ?? null,
+        cronLatestStatus: cronLatestJob ? pickLastRunStatus(cronLatestJob) : null,
+        cronLatestAt: cronLatestJob ? pickLastRunAt(cronLatestJob) : null,
+        cronNextAt,
       })
     } catch {
       // 静默降级
     } finally {
       setStatsLoading(false)
     }
-  }, [t])
+  }, [callRpc, gwState, status, t])
 
   useEffect(() => {
     loadStats()
+  }, [loadStats])
+
+  // Dashboard 没有配置变更推送事件，使用轻量轮询 + 回焦刷新保持数据新鲜度
+  useEffect(() => {
+    const refresh = (): void => {
+      void loadStats()
+    }
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+
+    const intervalId = window.setInterval(refresh, 5000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [loadStats])
 
   // ── 近期日志（只保留最近 30 条作为预览）──
@@ -251,42 +393,6 @@ function DashboardPage(): React.ReactElement {
   )
   const latestLog = logs.length > 0 ? logs[logs.length - 1] : null
 
-  // ── 三格配置卡数据 ──
-  const statCards = [
-    {
-      key: 'model',
-      icon: <ThunderboltOutlined style={{ fontSize: 22, color: '#FF4D2A' }} />,
-      count: stats.providerCount,
-      label: t('dashboard.stat.models'),
-      sub: stats.defaultModel
-        ? (stats.defaultModel.split('/').pop() ?? stats.defaultModel)
-        : t('dashboard.stat.noModel'),
-      subDim: !stats.defaultModel,
-      route: '/models',
-    },
-    {
-      key: 'agents',
-      icon: <RobotOutlined style={{ fontSize: 22, color: '#FF4D2A' }} />,
-      count: stats.agentCount,
-      label: t('dashboard.stat.agents'),
-      sub: stats.defaultAgent ?? t('dashboard.stat.noAgent'),
-      subDim: !stats.defaultAgent,
-      route: '/agents',
-    },
-    {
-      key: 'channels',
-      icon: <ApiOutlined style={{ fontSize: 22, color: '#FF4D2A' }} />,
-      count: stats.channelCount,
-      label: t('dashboard.stat.channels'),
-      sub:
-        stats.channelNames.length > 0
-          ? stats.channelNames.join(' · ')
-          : t('dashboard.stat.noChannel'),
-      subDim: stats.channelNames.length === 0,
-      route: '/channels',
-    },
-  ]
-
   const checklist = [
     {
       key: 'gateway',
@@ -299,7 +405,7 @@ function DashboardPage(): React.ReactElement {
     },
     {
       key: 'model',
-      done: !!stats.defaultModel,
+      done: stats.defaultModel != null,
       optional: false,
       title: t('dashboard.beginner.steps.model.title'),
       desc: t('dashboard.beginner.steps.model.desc'),
@@ -324,6 +430,156 @@ function DashboardPage(): React.ReactElement {
   const showBeginnerGuide =
     guideMode === 'always' || (guideMode === 'auto' && (guideAutoVisible || guideExpanded))
   const showBeginnerSummary = guideMode === 'auto' && !guideAutoVisible && !guideExpanded
+  const requiredDoneCount = checklist.filter((item) => item.done && !item.optional).length
+  const requiredTotalCount = checklist.filter((item) => !item.optional).length
+
+  const nextAction = !isRunning
+    ? {
+        title: t('dashboard.next.gateway.title'),
+        desc: t('dashboard.next.gateway.desc'),
+        cta: t('dashboard.next.gateway.cta'),
+        onClick: () => window.api.gateway.start(),
+      }
+    : !stats.defaultModel
+      ? {
+          title: t('dashboard.next.model.title'),
+          desc: t('dashboard.next.model.desc'),
+          cta: t('dashboard.next.model.cta'),
+          onClick: () => navigate('/models'),
+        }
+      : stats.agentCount === 0
+        ? {
+            title: t('dashboard.next.agent.title'),
+            desc: t('dashboard.next.agent.desc'),
+            cta: t('dashboard.next.agent.cta'),
+            onClick: () => navigate('/agents'),
+          }
+        : {
+            title: t('dashboard.next.chat.title'),
+            desc: t('dashboard.next.chat.desc'),
+            cta: t('dashboard.next.chat.cta'),
+            onClick: () => navigate('/chat'),
+          }
+
+  const recentRuns: DashCronTimelineItem[] = cronJobs
+    .map((job) => ({
+      id: job.id,
+      name: job.name || job.id,
+      enabled: job.enabled,
+      lastStatus: pickLastRunStatus(job),
+      lastAt: pickLastRunAt(job),
+      nextAt: pickNextRunAt(job),
+    }))
+    .filter((job) => job.lastAt != null || job.nextAt != null || job.enabled)
+    .sort((a, b) => {
+      const aLast = a.lastAt ?? 0
+      const bLast = b.lastAt ?? 0
+      if (aLast !== bLast) return bLast - aLast
+      const aNext = a.nextAt ?? Number.MAX_SAFE_INTEGER
+      const bNext = b.nextAt ?? Number.MAX_SAFE_INTEGER
+      return aNext - bNext
+    })
+    .slice(0, 5)
+
+  const scenarioTasks = [
+    {
+      key: 'chat',
+      title: t('dashboard.modules.chat.title'),
+      desc: t('dashboard.modules.chat.desc'),
+      done: isRunning && stats.defaultModel != null,
+      detail:
+        isRunning && stats.defaultModel != null
+          ? t('dashboard.modules.chat.summaryReady')
+          : t('dashboard.modules.chat.summaryPending'),
+      cta: t('dashboard.quickActions.chat'),
+      onClick: () => navigate('/chat'),
+    },
+    {
+      key: 'agent',
+      title: t('dashboard.modules.agents.title'),
+      desc: t('dashboard.modules.agents.desc'),
+      done: stats.agentCount > 0,
+      detail:
+        stats.defaultAgent ??
+        (stats.agentCount > 0
+          ? t('dashboard.modules.agents.summaryCount', { count: stats.agentCount })
+          : t('dashboard.modules.agents.summaryPending')),
+      cta: t('dashboard.quickActions.agents'),
+      onClick: () => navigate('/agents'),
+    },
+    {
+      key: 'channel',
+      title: t('dashboard.modules.channels.title'),
+      desc: t('dashboard.modules.channels.desc'),
+      done: stats.channelCount > 0,
+      detail:
+        stats.channelNames.length > 0
+          ? stats.channelNames.join(' · ')
+          : t('dashboard.modules.channels.summaryPending'),
+      cta: t('dashboard.modules.channels.title'),
+      onClick: () => navigate('/channels'),
+    },
+    {
+      key: 'cron',
+      title: t('dashboard.modules.cron.title'),
+      desc: t('dashboard.modules.cron.desc'),
+      done: stats.cronTotal > 0 && stats.cronFailed === 0,
+      detail:
+        stats.cronTotal > 0
+          ? t('dashboard.modules.cron.summary', {
+              enabled: stats.cronEnabled,
+              total: stats.cronTotal,
+            })
+          : t('dashboard.modules.cron.noRecord'),
+      cta: t('dashboard.quickActions.cron'),
+      onClick: () => navigate('/cron'),
+    },
+  ]
+
+  const todoQueue = [
+    !isRunning
+      ? {
+          key: 'start-gateway',
+          title: t('dashboard.queue.gateway.title'),
+          desc: t('dashboard.queue.gateway.desc'),
+          cta: t('dashboard.queue.gateway.cta'),
+          onClick: () => window.api.gateway.start(),
+        }
+      : null,
+    stats.defaultModel == null
+      ? {
+          key: 'setup-model',
+          title: t('dashboard.queue.model.title'),
+          desc: t('dashboard.queue.model.desc'),
+          cta: t('dashboard.queue.model.cta'),
+          onClick: () => navigate('/models'),
+        }
+      : null,
+    stats.agentCount === 0
+      ? {
+          key: 'create-agent',
+          title: t('dashboard.queue.agent.title'),
+          desc: t('dashboard.queue.agent.desc'),
+          cta: t('dashboard.queue.agent.cta'),
+          onClick: () => navigate('/agents'),
+        }
+      : null,
+    stats.cronFailed > 0
+      ? {
+          key: 'check-cron-failed',
+          title: t('dashboard.queue.cronFailure.title'),
+          desc: t('dashboard.queue.cronFailure.desc', { count: stats.cronFailed }),
+          cta: t('dashboard.queue.cronFailure.cta'),
+          onClick: () => navigate('/cron'),
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    key: string
+    title: string
+    desc: string
+    cta: string
+    onClick: () => void
+  }>
 
   return (
     <div
@@ -435,6 +691,9 @@ function DashboardPage(): React.ReactElement {
             </Button>
             <Button size="small" onClick={() => navigate('/agents')}>
               {t('dashboard.quickActions.agents')}
+            </Button>
+            <Button size="small" onClick={() => navigate('/cron')}>
+              {t('dashboard.quickActions.cron')}
             </Button>
             <Button size="small" onClick={() => navigate('/logs')}>
               {t('dashboard.quickActions.logs')}
@@ -607,79 +866,257 @@ function DashboardPage(): React.ReactElement {
         </div>
       </Card>
 
-      {/* ── 2. 配置快捷卡（三格） ── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 12,
-          flexShrink: 0,
-        }}
+      {/* ── 2. 下一步 + 场景模块 ── */}
+      <Card
+        style={{ borderColor: token.colorBorderSecondary, flexShrink: 0 }}
+        styles={{ body: { padding: 16 } }}
       >
-        {statCards.map((item) => (
-          <Card
-            key={item.key}
-            hoverable
-            onClick={() => navigate(item.route)}
-            style={{ cursor: 'pointer', borderColor: token.colorBorderSecondary }}
-            styles={{ body: { padding: '16px 20px' } }}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: token.colorText }}>
+              {t('dashboard.next.title')}
+            </div>
+            <div style={{ marginTop: 2, fontSize: 12, color: token.colorTextTertiary }}>
+              {t('dashboard.next.progress', {
+                done: requiredDoneCount,
+                total: requiredTotalCount,
+              })}
+            </div>
+          </div>
+          <Button
+            type="primary"
+            icon={<ArrowRightOutlined />}
+            style={{ background: '#FF4D2A', borderColor: '#FF4D2A', flexShrink: 0 }}
+            onClick={nextAction.onClick}
           >
-            <div
-              style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 30,
-                    fontWeight: 700,
-                    color: token.colorText,
-                    lineHeight: 1.1,
-                    fontVariantNumeric: 'tabular-nums',
-                    letterSpacing: '-0.02em',
-                    marginBottom: 6,
-                  }}
-                >
-                  {statsLoading ? <Spin size="small" style={{ opacity: 0.3 }} /> : item.count}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: token.colorTextSecondary,
-                    marginBottom: 3,
-                  }}
-                >
-                  {item.label}
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: item.subDim ? token.colorTextQuaternary : token.colorTextTertiary,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {item.sub}
-                </div>
-              </div>
+            {nextAction.cta}
+          </Button>
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            borderRadius: 8,
+            border: `1px dashed ${token.colorBorderSecondary}`,
+            background: token.colorFillTertiary,
+            padding: '10px 12px',
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>
+            {nextAction.title}
+          </div>
+          <div style={{ marginTop: 2, fontSize: 12, color: token.colorTextTertiary }}>
+            {nextAction.desc}
+          </div>
+        </div>
+      </Card>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12, flexShrink: 0 }}>
+        <Card
+          style={{ borderColor: token.colorBorderSecondary }}
+          styles={{ body: { padding: 14 } }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 700, color: token.colorText }}>
+            {t('dashboard.scenarios.title')}
+          </div>
+          <div style={{ marginTop: 2, fontSize: 12, color: token.colorTextTertiary }}>
+            {t('dashboard.scenarios.subtitle')}
+          </div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {scenarioTasks.map((item) => (
               <div
+                key={item.key}
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-end',
-                  justifyContent: 'space-between',
-                  height: 64,
-                  flexShrink: 0,
+                  border: `1px solid ${token.colorBorderSecondary}`,
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  background: token.colorBgContainer,
                 }}
               >
-                {item.icon}
-                <ArrowRightOutlined style={{ fontSize: 11, color: token.colorTextQuaternary }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {item.done ? (
+                    <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
+                  ) : (
+                    <ClockCircleOutlined style={{ color: '#faad14', fontSize: 12 }} />
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>
+                      {item.title}
+                    </div>
+                    <div style={{ marginTop: 1, fontSize: 12, color: token.colorTextTertiary }}>
+                      {item.desc}
+                    </div>
+                    <div style={{ marginTop: 2, fontSize: 11, color: token.colorTextQuaternary }}>
+                      {statsLoading ? <Spin size="small" style={{ opacity: 0.35 }} /> : item.detail}
+                    </div>
+                  </div>
+                  <Button size="small" onClick={item.onClick}>
+                    {item.cta}
+                  </Button>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            ))}
+          </div>
+        </Card>
+
+        <Card
+          style={{ borderColor: token.colorBorderSecondary }}
+          styles={{ body: { padding: 14 } }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 700, color: token.colorText }}>
+            {t('dashboard.queue.title')}
+          </div>
+          <div style={{ marginTop: 2, fontSize: 12, color: token.colorTextTertiary }}>
+            {t('dashboard.queue.subtitle')}
+          </div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {todoQueue.length === 0 ? (
+              <div
+                style={{
+                  border: `1px dashed ${token.colorBorderSecondary}`,
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  fontSize: 12,
+                  color: token.colorTextSecondary,
+                }}
+              >
+                {t('dashboard.queue.empty')}
+              </div>
+            ) : (
+              todoQueue.map((item) => (
+                <div
+                  key={item.key}
+                  style={{
+                    border: `1px solid ${token.colorBorderSecondary}`,
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <ExclamationCircleOutlined style={{ color: '#faad14', fontSize: 12 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>
+                        {item.title}
+                      </div>
+                      <div style={{ marginTop: 1, fontSize: 12, color: token.colorTextTertiary }}>
+                        {item.desc}
+                      </div>
+                    </div>
+                    <Button size="small" type="primary" onClick={item.onClick}>
+                      {item.cta}
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
       </div>
+
+      <Card style={{ borderColor: token.colorBorderSecondary }} styles={{ body: { padding: 14 } }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: token.colorText }}>
+              {t('dashboard.runs.title')}
+            </div>
+            <div style={{ marginTop: 2, fontSize: 12, color: token.colorTextTertiary }}>
+              {t('dashboard.runs.subtitle')}
+            </div>
+          </div>
+          <Button size="small" onClick={() => navigate('/cron')}>
+            {t('dashboard.runs.viewAll')}
+          </Button>
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {statsLoading ? (
+            <Spin size="small" />
+          ) : recentRuns.length === 0 ? (
+            <div
+              style={{
+                border: `1px dashed ${token.colorBorderSecondary}`,
+                borderRadius: 8,
+                padding: '10px 12px',
+                fontSize: 12,
+                color: token.colorTextSecondary,
+              }}
+            >
+              {t('dashboard.runs.empty')}
+            </div>
+          ) : (
+            recentRuns.map((item) => {
+              const toneColor =
+                item.lastStatus === 'error'
+                  ? '#cf1322'
+                  : item.lastStatus === 'ok'
+                    ? '#389e0d'
+                    : token.colorTextSecondary
+              const statusLabel =
+                item.lastStatus === 'ok'
+                  ? t('dashboard.modules.cron.statusOk')
+                  : item.lastStatus === 'error'
+                    ? t('dashboard.modules.cron.statusError')
+                    : item.lastStatus === 'skipped'
+                      ? t('dashboard.modules.cron.statusSkipped')
+                      : t('dashboard.runs.noLast')
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    border: `1px solid ${token.colorBorderSecondary}`,
+                    borderRadius: 8,
+                    padding: '10px 12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {item.lastStatus === 'error' ? (
+                      <ExclamationCircleOutlined style={{ color: '#ff4d4f', fontSize: 12 }} />
+                    ) : item.lastStatus === 'ok' ? (
+                      <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 12 }} />
+                    ) : (
+                      <ClockCircleOutlined style={{ color: '#faad14', fontSize: 12 }} />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: token.colorText }}>
+                        {item.name}
+                      </div>
+                      <div style={{ marginTop: 2, fontSize: 11, color: token.colorTextQuaternary }}>
+                        {t('dashboard.runs.lastAt', {
+                          status: statusLabel,
+                          when: formatWhen(item.lastAt),
+                        })}
+                        {' · '}
+                        {t('dashboard.runs.nextAt', {
+                          when:
+                            item.nextAt != null
+                              ? formatWhen(item.nextAt)
+                              : t('dashboard.runs.noNext'),
+                        })}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, color: toneColor, fontWeight: 600 }}>
+                      {item.enabled ? t('dashboard.runs.enabled') : t('dashboard.runs.disabled')}
+                    </span>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      </Card>
 
       {/* ── 3. 近期日志预览 ── */}
       <div style={{ flex: 1, minHeight: 120, display: 'flex', flexDirection: 'column' }}>
@@ -689,6 +1126,7 @@ function DashboardPage(): React.ReactElement {
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: 8,
+            gap: 12,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -716,22 +1154,24 @@ function DashboardPage(): React.ReactElement {
               />
             )}
           </div>
-          <Button
-            type="link"
-            size="small"
-            style={{ padding: 0, height: 'auto', fontSize: 12, color: token.colorTextTertiary }}
-            onClick={() => setLogExpanded((v) => !v)}
-          >
-            {logExpanded ? t('dashboard.log.collapse') : t('dashboard.log.expand')}
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            style={{ padding: 0, height: 'auto', fontSize: 12, color: token.colorTextTertiary }}
-            onClick={() => navigate('/logs')}
-          >
-            {t('dashboard.log.viewAll')} <ArrowRightOutlined style={{ fontSize: 10 }} />
-          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0, height: 'auto', fontSize: 12, color: token.colorTextTertiary }}
+              onClick={() => setLogExpanded((v) => !v)}
+            >
+              {logExpanded ? t('dashboard.log.collapse') : t('dashboard.log.expand')}
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: 0, height: 'auto', fontSize: 12, color: token.colorTextTertiary }}
+              onClick={() => navigate('/logs')}
+            >
+              {t('dashboard.log.viewAll')} <ArrowRightOutlined style={{ fontSize: 10 }} />
+            </Button>
+          </div>
         </div>
 
         {logExpanded ? (

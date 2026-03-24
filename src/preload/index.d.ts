@@ -216,6 +216,21 @@ declare global {
     [key: string]: unknown
   }
 
+  interface BindingRouteRule extends BindingConfig {
+    id: string
+    type?: 'route'
+    priority?: number
+    match: {
+      channel: string
+      accountId?: string
+      peer?: { kind: string; id: string }
+      guildId?: string
+      teamId?: string
+      roles?: string[]
+      [key: string]: unknown
+    }
+  }
+
   /** App 状态（UI 持久化） */
   interface AppState {
     setupCompleted?: boolean
@@ -555,7 +570,7 @@ declare global {
       /** 退出并安装（downloaded 状态时有效） */
       install: () => Promise<void>
       /** 订阅状态推送（主进程 → renderer） */
-      onStatusChanged: (callback: (info: UpdateInfo) => void) => void
+      onStatusChanged: (callback: (info: UpdateInfo) => void) => () => void
     }
 
     /** Agent 管理 */
@@ -653,6 +668,10 @@ declare global {
       list: () => Promise<BindingConfig[]>
       save: (agentId: string, channel: string, accountId: string) => Promise<void>
       delete: (channel: string, accountId: string) => Promise<void>
+      listRules: () => Promise<BindingRouteRule[]>
+      saveRule: (rule: Omit<BindingRouteRule, 'id'> & { id?: string }) => Promise<BindingRouteRule>
+      deleteRule: (id: string) => Promise<void>
+      reorder: (ids: string[]) => Promise<BindingRouteRule[]>
     }
 
     /** App 状态持久化（侧栏折叠、窗口位置） */

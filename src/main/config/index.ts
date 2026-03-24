@@ -27,6 +27,10 @@ export {
   setDefaultModel,
   inspectConfigHealth,
   getBindings,
+  listBindingRules,
+  saveBindingRule,
+  deleteBindingRule,
+  reorderBindingRules,
   saveBinding,
   deleteBinding,
 } from './manager'
@@ -37,6 +41,7 @@ export type {
   AgentConfig,
   ConfigHealth,
   BindingConfig,
+  BindingRouteRule,
 } from './manager'
 
 export { readEnv, getEnvValue, setEnvValues, deleteEnvValue, ENV_KEYS } from './env-file'

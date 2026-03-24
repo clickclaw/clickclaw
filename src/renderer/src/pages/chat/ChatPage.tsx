@@ -30,6 +30,7 @@ import {
 } from '@ant-design/icons'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLocation } from 'react-router-dom'
 import { useGatewayContext } from '../../contexts/GatewayContext'
 import { ChatEmptyState } from './components/ChatEmptyState'
 import { ChatSessionsSider } from './components/ChatSessionsSider'
@@ -52,9 +53,11 @@ const { Content } = Layout
 
 function ChatPage(): React.ReactElement {
   const { t } = useTranslation()
+  const location = useLocation()
   const { token } = theme.useToken()
   const { message: msg, modal } = App.useApp()
   const senderRef = useRef<GetRef<typeof Sender>>(null)
+  const seededAgentHintRef = useRef<string | null>(null)
 
   const {
     status,
@@ -80,15 +83,12 @@ function ChatPage(): React.ReactElement {
     callRpc,
   } = useGatewayContext()
 
-  const { handleOpenNewSession, handleDeleteSession, handleResetSession } = useChatSessions({
-    sessions,
-    newSession,
-    deleteSession,
-    resetSession,
-    messageApi: msg,
-    modalApi: modal,
-    t,
-  })
+  const seedAgentId = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const raw = params.get('agent_id') || params.get('agentId') || ''
+    const normalized = raw.trim()
+    return normalized || null
+  }, [location.search])
 
   const { messagesContainerRef, showConnectingSpinner } = useChatConnectionUi(
     status,
@@ -130,6 +130,22 @@ function ChatPage(): React.ReactElement {
   const quickPrompts = useChatPrompts(t)
   const [agentOptions, setAgentOptions] = useState<Array<{ value: string; label: string }>>([])
   const [loadingAgents, setLoadingAgents] = useState(false)
+  const [agentsLoadedOnce, setAgentsLoadedOnce] = useState(false)
+  const [preferredNewSessionAgentId, setPreferredNewSessionAgentId] = useState<string | undefined>(
+    undefined
+  )
+  const { handleOpenNewSession, handleDeleteSession, handleResetSession } = useChatSessions({
+    sessions,
+    newSession,
+    deleteSession,
+    resetSession,
+    preferredAgentId: preferredNewSessionAgentId,
+    preferredAgentName:
+      agentOptions.find((item) => item.value === preferredNewSessionAgentId)?.label || undefined,
+    messageApi: msg,
+    modalApi: modal,
+    t,
+  })
   const slashCommands = useChatCommands(t)
   const {
     showThinking,
@@ -216,8 +232,40 @@ function ChatPage(): React.ReactElement {
         })
         setAgentOptions(items)
       })
-      .finally(() => setLoadingAgents(false))
+      .finally(() => {
+        setLoadingAgents(false)
+        setAgentsLoadedOnce(true)
+      })
   }, [listAgents, status])
+
+  useEffect(() => {
+    if (status !== 'ready' || loadingAgents || !agentsLoadedOnce) return
+
+    const seedKey = seedAgentId || '__none__'
+    if (seededAgentHintRef.current === seedKey) return
+    seededAgentHintRef.current = seedKey
+
+    if (!seedAgentId) {
+      setPreferredNewSessionAgentId(undefined)
+      return
+    }
+
+    const seeded = agentOptions.find((item) => item.value === seedAgentId)
+    if (seeded) {
+      setPreferredNewSessionAgentId(seeded.value)
+      msg.info(t('chat.entry.prefilledAgentHint', { name: seeded.label }))
+      return
+    }
+
+    if (defaultAgentId) {
+      setPreferredNewSessionAgentId(defaultAgentId)
+      msg.warning(t('chat.entry.invalidAgentFallback'))
+      return
+    }
+
+    setPreferredNewSessionAgentId(undefined)
+    msg.warning(t('chat.entry.noDefaultAgent'))
+  }, [agentOptions, agentsLoadedOnce, defaultAgentId, loadingAgents, msg, seedAgentId, status, t])
 
   // ========== Gateway 未运行状态 ==========
 

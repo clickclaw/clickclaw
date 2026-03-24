@@ -5,6 +5,8 @@ interface UseChatSessionsArgs {
   newSession: (name: string, agentId?: string) => void
   deleteSession: (key: string) => Promise<void>
   resetSession: (key?: string) => Promise<void>
+  preferredAgentId?: string
+  preferredAgentName?: string
   messageApi: {
     success: (content: string) => void
     warning: (content: string) => void
@@ -28,6 +30,8 @@ export function useChatSessions({
   newSession,
   deleteSession,
   resetSession,
+  preferredAgentId,
+  preferredAgentName,
   messageApi,
   modalApi,
   t,
@@ -39,9 +43,15 @@ export function useChatSessions({
     ).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(
       now.getMinutes()
     ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
-    newSession(autoName)
+    newSession(autoName, preferredAgentId)
+    if (preferredAgentId && preferredAgentName) {
+      messageApi.success(
+        t('chat.sessions.newSessionWithAgentSuccess', { name: preferredAgentName })
+      )
+      return
+    }
     messageApi.success(t('chat.sessions.newSessionSuccess'))
-  }, [messageApi, newSession, t])
+  }, [messageApi, newSession, preferredAgentId, preferredAgentName, t])
 
   const handleDeleteSession = useCallback(
     (key: string): void => {

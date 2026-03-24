@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type {
   AgentConfig,
   BindingConfig,
+  BindingRouteRule,
   ChannelConfig,
   ChannelPresetForUI,
 } from '../channels-page.types'
@@ -27,6 +28,9 @@ export function useChannelsPage() {
   const [channels, setChannels] = useState<Record<string, ChannelConfig>>({})
   const [agents, setAgents] = useState<AgentConfig[]>([])
   const [bindings, setBindings] = useState<BindingConfig[]>([])
+  const [bindingRules, setBindingRules] = useState<BindingRouteRule[]>([])
+  const [bindingRulesOpen, setBindingRulesOpen] = useState(false)
+  const [bindingRulesLoading, setBindingRulesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -60,9 +64,23 @@ export function useChannelsPage() {
     }
   }, [])
 
+  const loadBindingRules = useCallback(async () => {
+    setBindingRulesLoading(true)
+    try {
+      const result = await window.api.binding.listRules()
+      setBindingRules(result as BindingRouteRule[])
+    } finally {
+      setBindingRulesLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    void loadBindingRules()
+  }, [loadBindingRules])
 
   const allPresets = useMemo(() => [...presets.domestic, ...presets.international], [presets])
   const configuredKeys = useMemo(() => Object.keys(channels), [channels])
@@ -334,6 +352,11 @@ export function useChannelsPage() {
     channels,
     agents,
     bindings,
+    bindingRules,
+    bindingRulesOpen,
+    setBindingRulesOpen,
+    bindingRulesLoading,
+    loadBindingRules,
     loading,
     pickerOpen,
     setPickerOpen,

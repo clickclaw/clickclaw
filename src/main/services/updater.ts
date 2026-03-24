@@ -18,6 +18,7 @@ import { autoUpdater } from 'electron-updater'
 import { app } from 'electron'
 import type { BrowserWindow } from 'electron'
 import { createLogger } from '../logger'
+import { getGatewayProcess } from '../gateway'
 
 const log = createLogger('updater')
 
@@ -39,6 +40,7 @@ export interface UpdateInfo {
 
 let currentInfo: UpdateInfo = { status: 'idle' }
 let mainWindow: BrowserWindow | null = null
+let installing = false
 
 // ────────────────────────────────────
 // 工具：推送状态到 renderer
@@ -125,10 +127,39 @@ export function downloadUpdate(): void {
   })
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function stopGatewayBeforeInstall(timeoutMs = 8000): Promise<void> {
+  const gw = getGatewayProcess()
+  gw.stopStatusPolling()
+
+  if (gw.getState() === 'stopped') return
+
+  try {
+    await Promise.race([gw.stop(), sleep(timeoutMs)])
+  } catch (err) {
+    log.warn('stop gateway before install failed:', err)
+  }
+
+  if (gw.getState() !== 'stopped') {
+    log.warn('gateway is still not fully stopped before quitAndInstall')
+  }
+}
+
 /** 退出并安装（仅 downloaded 状态有效） */
-export function quitAndInstall(): void {
+export async function quitAndInstall(): Promise<void> {
   if (currentInfo.status !== 'downloaded') return
-  autoUpdater.quitAndInstall(false, true)
+  if (installing) return
+
+  installing = true
+  try {
+    await stopGatewayBeforeInstall()
+    autoUpdater.quitAndInstall(false, true)
+  } finally {
+    installing = false
+  }
 }
 
 /** 获取当前更新状态快照 */

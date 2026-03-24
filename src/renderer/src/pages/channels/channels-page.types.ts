@@ -14,6 +14,21 @@ export interface BindingConfig {
   [key: string]: unknown
 }
 
+export interface BindingRouteRule extends BindingConfig {
+  id: string
+  type?: 'route'
+  priority?: number
+  match: {
+    channel: string
+    accountId?: string
+    peer?: { kind: string; id: string }
+    guildId?: string
+    teamId?: string
+    roles?: string[]
+    [key: string]: unknown
+  }
+}
+
 export interface ChannelFieldDef {
   key: string
   label: string
@@ -128,4 +143,15 @@ export interface AccountConfigDrawerProps {
     options?: { successMessage?: string }
   ) => Promise<void>
   saving: boolean
+}
+
+export interface BindingRulesDrawerProps {
+  open: boolean
+  rules: BindingRouteRule[]
+  loading: boolean
+  agents: AgentConfig[]
+  channels: Record<string, ChannelConfig>
+  presets: ChannelPresetForUI[]
+  onClose: () => void
+  onRefresh: () => Promise<void>
 }

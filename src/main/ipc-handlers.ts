@@ -21,8 +21,6 @@ import {
   restoreFromSnapshot,
   createSnapshot,
   getAgents,
-  saveAgent,
-  deleteAgent,
   setDefaultAgent,
   getProviders,
   setProvider,
@@ -37,6 +35,10 @@ import {
   getChannelPreset,
   verifyChannel,
   getBindings,
+  listBindingRules,
+  saveBindingRule,
+  deleteBindingRule,
+  reorderBindingRules,
   saveBinding,
   deleteBinding,
 } from './config'
@@ -63,6 +65,7 @@ import {
   installOpenclawUpdate,
   getCurrentOpenclawVersion,
 } from './services/openclaw-updater'
+import { createAgentViaCli, deleteAgentViaCli } from './services/agent-lifecycle'
 import { createLogger } from './logger'
 import { getRuntime } from './runtime'
 import { readFileSync, existsSync, mkdirSync } from 'fs'
@@ -566,8 +569,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('update:download', () => {
     downloadUpdate()
   })
-  ipcMain.handle('update:install', () => {
-    quitAndInstall()
+  ipcMain.handle('update:install', async () => {
+    await quitAndInstall()
   })
 
   // ========== OpenClaw 版本升级 ==========
@@ -598,12 +601,12 @@ export function registerIpcHandlers(): void {
     return getAgents()
   })
 
-  ipcMain.handle('agent:save', (_event, agent: AgentConfig) => {
-    return saveAgent(agent)
+  ipcMain.handle('agent:save', async (_event, agent: AgentConfig) => {
+    return await createAgentViaCli(agent)
   })
 
-  ipcMain.handle('agent:delete', (_event, agentId: string) => {
-    deleteAgent(agentId)
+  ipcMain.handle('agent:delete', async (_event, agentId: string) => {
+    await deleteAgentViaCli(agentId)
   })
 
   ipcMain.handle('agent:set-default', (_event, agentId: string) => {
@@ -826,12 +829,47 @@ export function registerIpcHandlers(): void {
     return getBindings()
   })
 
+  ipcMain.handle('binding:list-rules', () => {
+    return listBindingRules()
+  })
+
   ipcMain.handle('binding:save', (_event, agentId: string, channel: string, accountId: string) => {
     saveBinding(agentId, channel, accountId)
   })
 
+  ipcMain.handle(
+    'binding:save-rule',
+    (
+      _event,
+      rule: {
+        id?: string
+        type?: 'route'
+        priority?: number
+        agentId: string
+        match: {
+          channel: string
+          accountId?: string
+          peer?: { kind: string; id: string }
+          guildId?: string
+          teamId?: string
+          roles?: string[]
+        }
+      }
+    ) => {
+      return saveBindingRule(rule)
+    }
+  )
+
   ipcMain.handle('binding:delete', (_event, channel: string, accountId: string) => {
     deleteBinding(channel, accountId)
+  })
+
+  ipcMain.handle('binding:delete-rule', (_event, id: string) => {
+    deleteBindingRule(id)
+  })
+
+  ipcMain.handle('binding:reorder', (_event, ids: string[]) => {
+    return reorderBindingRules(ids)
   })
 
   // ========== App State ==========

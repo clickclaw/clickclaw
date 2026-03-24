@@ -217,9 +217,123 @@
         }
       }
     },
+    "next": {
+      "title": "下一步建议",
+      "progress": "基础完成进度：{{done}} / {{total}}",
+      "gateway": {
+        "title": "先启动服务引擎",
+        "desc": "这是所有功能的前置条件，启动后才能聊天和执行任务。",
+        "cta": "启动服务"
+      },
+      "model": {
+        "title": "配置默认模型",
+        "desc": "至少配置 1 个可用模型，聊天和自动任务才会生效。",
+        "cta": "去配置模型"
+      },
+      "agent": {
+        "title": "创建你的第一个智能体",
+        "desc": "给 AI 一个身份和职责，后续可按场景扩展多个智能体。",
+        "cta": "去创建智能体"
+      },
+      "chat": {
+        "title": "可以开始使用了",
+        "desc": "基础配置已就绪，建议先进入聊天页面发第一条消息。",
+        "cta": "开始聊天"
+      }
+    },
+    "modules": {
+      "ready": "已就绪",
+      "needSetup": "需要配置",
+      "optional": "可选功能",
+      "optionalDone": "已连接",
+      "chat": {
+        "title": "开始聊天",
+        "desc": "直接在应用内和 AI 对话",
+        "summaryReady": "模型与服务引擎已就绪",
+        "summaryPending": "先完成服务启动和模型配置"
+      },
+      "model": {
+        "title": "模型设置",
+        "desc": "配置默认模型与服务商",
+        "summaryPending": "未设置默认模型"
+      },
+      "channels": {
+        "title": "聊天渠道",
+        "desc": "连接飞书、企微等外部 IM",
+        "summaryPending": "暂未连接渠道"
+      },
+      "agents": {
+        "title": "智能体管理",
+        "desc": "按角色创建不同 AI 助手",
+        "summaryPending": "尚未创建智能体",
+        "summaryCount": "已创建 {{count}} 个智能体（未设置默认）"
+      },
+      "cron": {
+        "title": "自动任务",
+        "desc": "查看定时任务执行记录",
+        "needAttention": "有失败记录",
+        "summary": "已启用 {{enabled}} / 共 {{total}}",
+        "noRecord": "暂无运行记录",
+        "none": "暂无",
+        "justNow": "刚刚",
+        "minutesAgo": "{{n}} 分钟前",
+        "inMinutes": "{{n}} 分钟后",
+        "hoursAgo": "{{n}} 小时前",
+        "inHours": "{{n}} 小时后",
+        "daysAgo": "{{n}} 天前",
+        "inDays": "{{n}} 天后",
+        "statusOk": "成功",
+        "statusError": "失败",
+        "statusSkipped": "跳过",
+        "latestRun": "最近：{{name}} · {{when}} · {{status}}",
+        "nextRun": "下次：{{when}}"
+      }
+    },
+    "scenarios": {
+      "title": "常用场景",
+      "subtitle": "按场景操作，不看复杂指标"
+    },
+    "queue": {
+      "title": "待处理事项",
+      "subtitle": "这些问题会直接影响可用性",
+      "empty": "当前没有待处理项，可以直接开始使用。",
+      "gateway": {
+        "title": "服务引擎尚未启动",
+        "desc": "未启动时，聊天与自动任务都不可用。",
+        "cta": "立即启动"
+      },
+      "model": {
+        "title": "还没有默认模型",
+        "desc": "需要先配置默认模型，聊天和任务才可执行。",
+        "cta": "去配置"
+      },
+      "agent": {
+        "title": "还没有智能体",
+        "desc": "建议先创建一个通用智能体，后续再按场景扩展。",
+        "cta": "去创建"
+      },
+      "cronFailure": {
+        "title": "自动任务有失败记录",
+        "desc": "最近失败 {{count}} 次，建议尽快排查任务配置。",
+        "cta": "去查看"
+      }
+    },
+    "runs": {
+      "title": "自动任务记录",
+      "subtitle": "展示最近执行与下一次触发",
+      "viewAll": "查看全部",
+      "empty": "暂无可展示的任务记录",
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "noLast": "暂无上次执行",
+      "noNext": "暂无下次计划",
+      "lastAt": "上次：{{status}} · {{when}}",
+      "nextAt": "下次：{{when}}"
+    },
     "quickActions": {
       "chat": "开始聊天",
       "agents": "智能体管理",
+      "cron": "自动任务",
       "logs": "查看日志"
     },
     "channelNames": {
@@ -291,6 +405,11 @@
     "agent": {
       "label": "智能体"
     },
+    "entry": {
+      "prefilledAgentHint": "已按智能体「{{name}}」进入聊天",
+      "invalidAgentFallback": "指定智能体不存在，已切换到默认智能体",
+      "noDefaultAgent": "未设置默认智能体，请先选择一个智能体"
+    },
     "display": {
       "thinking": "思考",
       "tools": "工具",
@@ -320,6 +439,7 @@
       "newSessionAgentPlaceholder": "选择智能体",
       "newSessionNameRequired": "请输入会话名称",
       "newSessionSuccess": "会话已创建",
+      "newSessionWithAgentSuccess": "会话已创建，默认智能体：{{name}}",
       "deleteConfirmTitle": "删除会话",
       "deleteConfirmContent": "确定删除会话「{{label}}」？此操作不可恢复。",
       "deleteSuccess": "会话已删除",
@@ -534,14 +654,67 @@
     "setDefaultSuccess": "已设为默认智能体",
     "saveSuccess": "智能体已保存",
     "saveFailed": "保存失败：{{error}}",
+    "actions": {
+      "openChat": "去实时聊天"
+    },
     "mainSessionProtected": "内置 main 智能体不可删除",
     "noSelection": "请选择一个智能体",
     "noSelectionHint": "从左侧列表选择智能体，查看详情或编辑文件",
     "tabs": {
       "overview": "概览",
+      "channels": "渠道",
+      "cron": "任务",
       "files": "文件",
       "tools": "工具",
       "skills": "技能"
+    },
+    "channels": {
+      "globalHint": "此处展示全局渠道状态，并标记当前智能体的绑定关系。",
+      "openManage": "管理渠道",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "boundCurrent": "绑定到当前智能体",
+      "unbound": "未绑定",
+      "quickBind": "绑定当前",
+      "quickUnbind": "解绑",
+      "bindSuccess": "已绑定到当前智能体",
+      "unbindSuccess": "已解除绑定",
+      "bindFailed": "绑定失败：{{error}}",
+      "noAccount": "无账户",
+      "empty": "暂无渠道配置",
+      "loadFailed": "加载渠道失败：{{error}}",
+      "summary": {
+        "total": "总条目：{{count}}",
+        "enabled": "启用：{{count}}",
+        "bound": "绑定当前智能体：{{count}}"
+      },
+      "table": {
+        "channel": "渠道",
+        "account": "账户",
+        "status": "状态",
+        "binding": "绑定",
+        "action": "操作"
+      }
+    },
+    "cron": {
+      "filterHint": "此处仅展示绑定到当前智能体的定时任务（按 agentId 过滤）。",
+      "openManage": "管理任务",
+      "enabled": "启用中",
+      "disabled": "已停用",
+      "statusOk": "成功",
+      "statusError": "失败",
+      "statusSkipped": "跳过",
+      "schedule": "计划",
+      "lastRun": "上次执行",
+      "nextRun": "下次执行",
+      "empty": "当前智能体暂无定时任务",
+      "wsRequired": "需要连接 Gateway 才能加载任务",
+      "loadFailed": "加载任务失败：{{error}}",
+      "summary": {
+        "total": "任务总数：{{count}}",
+        "enabled": "已启用：{{count}}",
+        "failed": "最近失败：{{count}}"
+      }
     },
     "overview": {
       "modelLabel": "模型",
@@ -682,6 +855,74 @@
   },
   "channels": {
     "title": "聊天频道配置",
+    "bindingRules": {
+      "open": "路由规则",
+      "title": "路由规则（高级）",
+      "add": "加一条规则",
+      "refresh": "刷新",
+      "empty": "还没有规则，先加一条试试",
+      "createTitle": "新建规则",
+      "editTitle": "改规则",
+      "created": "规则已加好",
+      "updated": "规则已更新",
+      "deleted": "规则已删除",
+      "deleteConfirmTitle": "确定删掉这条规则吗？",
+      "intro": {
+        "title": "这个功能是做消息分流的",
+        "description": "先选「交给哪个智能体」，再选「消息来自哪个渠道」，账号可选不填。这样不同渠道/账号的消息就会自动分给对应智能体。"
+      },
+      "table": {
+        "order": "顺序",
+        "agent": "智能体",
+        "channel": "渠道",
+        "accountId": "账户 ID",
+        "priority": "优先级",
+        "match": "命中条件",
+        "actions": "操作",
+        "actionsMoveUp": "上移",
+        "actionsMoveDown": "下移",
+        "actionsEdit": "编辑",
+        "actionsDelete": "删除",
+        "matchSummary": {
+          "default": "按渠道 + 账号匹配",
+          "peer": "聊天对象：{{kind}}（{{id}}）",
+          "guild": "服务器：{{id}}",
+          "team": "团队：{{id}}",
+          "roles": "角色：{{ids}}",
+          "separator": "；"
+        }
+      },
+      "form": {
+        "agent": "交给哪个智能体",
+        "agentRequired": "请选择智能体",
+        "agentHint": "一般选你平时默认使用的智能体就行",
+        "channel": "消息来自哪个渠道",
+        "channelRequired": "请选择渠道",
+        "channelHint": "比如微信、飞书、企微",
+        "accountId": "用哪个账号接消息（可选）",
+        "accountIdHint": "不填就走该渠道的默认账号",
+        "accountIdPlaceholder": "可选已有账户，也可手动输入；不填走默认账户",
+        "defaultAccountTag": "默认",
+        "priority": "优先级（数字越小越先匹配）",
+        "priorityHint": "通常保持 0 即可；有多条规则时再调整",
+        "advancedTitle": "高级条件（可选）",
+        "moreAdvancedTitle": "更多过滤条件（进阶，可选）",
+        "peerHint": "聊天对象是可选项。大多数情况下不用填，只有想精确分流到某个用户/群时再填。",
+        "peerKind": "聊天对象类型（可选）",
+        "peerKindOptions": {
+          "direct": "单聊",
+          "group": "群聊",
+          "channel": "频道",
+          "dm": "私信"
+        },
+        "peerId": "聊天对象 ID（可选）",
+        "peerIdPlaceholder": "比如某个用户 / 群 / 频道的 ID",
+        "guildId": "服务器 ID（Guild，可选）",
+        "teamId": "团队 ID（Team，可选）",
+        "roles": "角色 IDs（可选）",
+        "rolesPlaceholder": "多个角色 ID 用逗号或换行分开"
+      }
+    },
     "addChannel": "添加聊天频道",
     "channelCount": "{{count}} 个聊天频道",
     "noChannels": "暂无聊天频道",
@@ -788,7 +1029,11 @@
       "feishuStreamingEnabled": "启用 streaming",
       "feishuStreamingEnabledHint": "开启后优先使用流式输出能力",
       "feishuBlockStreaming": "阻止下游继续流式输出",
-      "feishuBlockStreamingHint": "开启后会阻断下游 streaming，按完整消息返回"
+      "feishuBlockStreamingHint": "开启后会阻断下游 streaming，按完整消息返回",
+      "allowlistWarnings": {
+        "dmEmpty": "你选了白名单，但还没填用户 ID。后果：私聊消息会被拦截。",
+        "groupEmpty": "你选了群白名单，但群白名单和私聊白名单都为空。后果：群消息会被静默丢弃。"
+      }
     },
     "pickerDrawer": {
       "title": "选择聊天频道",

@@ -3,6 +3,8 @@ import { Button, Popconfirm, Tooltip } from 'antd'
 import { DeleteOutlined, LockOutlined, StarFilled } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentDetailPanelProps } from '../agents-page.types'
+import { AgentChannelsTab } from './AgentChannelsTab'
+import { AgentCronTab } from './AgentCronTab'
 import { AgentFilesTab } from './AgentFilesTab'
 import { AgentOverviewTab } from './AgentOverviewTab'
 import { AgentSkillsTab } from './AgentSkillsTab'
@@ -40,6 +42,8 @@ export function AgentDetailPanel({
         <div style={{ display: 'flex', gap: 2 }}>
           {[
             { key: 'overview', label: t('agents.tabs.overview') },
+            { key: 'channels', label: t('agents.tabs.channels') },
+            { key: 'cron', label: t('agents.tabs.cron') },
             { key: 'files', label: t('agents.tabs.files') },
             { key: 'tools', label: t('agents.tabs.tools') },
             { key: 'skills', label: t('agents.tabs.skills') },
@@ -116,6 +120,10 @@ export function AgentDetailPanel({
         )}
         {activeTab === 'files' && (
           <AgentFilesTab agentId={agent.id} wsReady={wsReady} callRpc={callRpc} />
+        )}
+        {activeTab === 'channels' && <AgentChannelsTab agentId={agent.id} />}
+        {activeTab === 'cron' && (
+          <AgentCronTab agentId={agent.id} wsReady={wsReady} callRpc={callRpc} />
         )}
         {activeTab === 'tools' && (
           <AgentToolsTab

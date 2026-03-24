@@ -69,6 +69,16 @@ export interface AgentFilesTabProps {
   callRpc: (method: string, params: unknown) => Promise<unknown>
 }
 
+export interface AgentChannelsTabProps {
+  agentId: string
+}
+
+export interface AgentCronTabProps {
+  agentId: string
+  wsReady: boolean
+  callRpc: (method: string, params: unknown) => Promise<unknown>
+}
+
 export interface AgentToolsTabProps {
   agent: AgentConfig
   wsReady: boolean

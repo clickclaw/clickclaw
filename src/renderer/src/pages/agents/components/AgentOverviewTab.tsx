@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { App, AutoComplete, Button, Checkbox, Input, Tooltip } from 'antd'
 import type { DefaultOptionType } from 'antd/es/select'
-import { CloseOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons'
+import { CloseOutlined, EditOutlined, MessageOutlined, SaveOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import type { AgentConfig, AgentOverviewTabProps } from '../agents-page.types'
 import { PROFILE_CONFIG } from '../agents-page.utils'
 
@@ -37,6 +38,7 @@ export function AgentOverviewTab({
 }: AgentOverviewTabProps): React.ReactElement {
   const { t } = useTranslation()
   const { message } = App.useApp()
+  const navigate = useNavigate()
 
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -280,6 +282,17 @@ export function AgentOverviewTab({
         </div>
         <Button icon={<EditOutlined />} size="small" onClick={startEdit}>
           {t('agents.edit')}
+        </Button>
+        <Button
+          type="primary"
+          icon={<MessageOutlined />}
+          size="small"
+          onClick={() =>
+            navigate(`/chat?agent_id=${encodeURIComponent(agent.id)}&from=agent_detail`)
+          }
+          style={{ background: '#FF4D2A', borderColor: '#FF4D2A' }}
+        >
+          {t('agents.actions.openChat')}
         </Button>
       </div>
 

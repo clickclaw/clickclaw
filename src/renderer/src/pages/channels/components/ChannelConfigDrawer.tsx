@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { App, Button, Collapse, Divider, Drawer, Form, Input, QRCode, Select, Switch } from 'antd'
+import {
+  Alert,
+  App,
+  Button,
+  Collapse,
+  Divider,
+  Drawer,
+  Form,
+  Input,
+  QRCode,
+  Select,
+  Switch,
+} from 'antd'
 import { CheckCircleFilled, LinkOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { TITLE_BAR_HEIGHT } from '../../../components/TitleBar'
@@ -104,6 +116,17 @@ export function ChannelConfigDrawer({
       .then(setWeixinStatus)
       .catch(() => setWeixinStatus(null))
   }, [open, preset?.key])
+
+  const watchedAllowFrom = Form.useWatch('allowFrom', form) as string | undefined
+  const watchedGroupAllowFrom = Form.useWatch('groupAllowFrom', form) as string | undefined
+
+  const parseAllowFrom = (raw: string | undefined): string[] =>
+    typeof raw === 'string'
+      ? raw
+          .split('\n')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : []
 
   if (!preset) return <></>
 
@@ -435,6 +458,11 @@ export function ChannelConfigDrawer({
 
   const hasDmAllowlist = watchedDmPolicy === 'allowlist'
   const hasGroupAllowlist = watchedGroupPolicy === 'allowlist' && supportsGroupAllowFrom(preset)
+  const dmAllowFromEntries = parseAllowFrom(watchedAllowFrom)
+  const groupAllowFromEntries = parseAllowFrom(watchedGroupAllowFrom)
+  const shouldWarnDmAllowlistEmpty = hasDmAllowlist && dmAllowFromEntries.length === 0
+  const shouldWarnGroupAllowlistEmpty =
+    hasGroupAllowlist && groupAllowFromEntries.length === 0 && dmAllowFromEntries.length === 0
   const scanHintStyle = {
     marginBottom: 8,
     fontSize: 12,
@@ -936,13 +964,23 @@ export function ChannelConfigDrawer({
         )}
 
         {hasDmAllowlist && (
-          <Form.Item name="allowFrom" label={t('channels.allowFrom')}>
-            <Input.TextArea
-              rows={3}
-              placeholder={t('channels.allowFromPlaceholder')}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
-            />
-          </Form.Item>
+          <>
+            <Form.Item name="allowFrom" label={t('channels.allowFrom')}>
+              <Input.TextArea
+                rows={3}
+                placeholder={t('channels.allowFromPlaceholder')}
+                style={{ fontFamily: 'monospace', fontSize: 13 }}
+              />
+            </Form.Item>
+            {shouldWarnDmAllowlistEmpty && (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginTop: -8, marginBottom: 12 }}
+                message={t('channels.configDrawer.allowlistWarnings.dmEmpty')}
+              />
+            )}
+          </>
         )}
 
         {preset.supportsGroup && preset.groupPolicies.length > 0 && (
@@ -957,13 +995,23 @@ export function ChannelConfigDrawer({
             </Form.Item>
 
             {hasGroupAllowlist && (
-              <Form.Item name="groupAllowFrom" label={t('channels.groupAllowFrom')}>
-                <Input.TextArea
-                  rows={3}
-                  placeholder={t('channels.groupAllowFromPlaceholder')}
-                  style={{ fontFamily: 'monospace', fontSize: 13 }}
-                />
-              </Form.Item>
+              <>
+                <Form.Item name="groupAllowFrom" label={t('channels.groupAllowFrom')}>
+                  <Input.TextArea
+                    rows={3}
+                    placeholder={t('channels.groupAllowFromPlaceholder')}
+                    style={{ fontFamily: 'monospace', fontSize: 13 }}
+                  />
+                </Form.Item>
+                {shouldWarnGroupAllowlistEmpty && (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    style={{ marginTop: -8, marginBottom: 12 }}
+                    message={t('channels.configDrawer.allowlistWarnings.groupEmpty')}
+                  />
+                )}
+              </>
             )}
           </>
         )}

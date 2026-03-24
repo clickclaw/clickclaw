@@ -96,8 +96,10 @@ const api = {
     check: (): Promise<void> => ipcRenderer.invoke('update:check'),
     download: (): Promise<void> => ipcRenderer.invoke('update:download'),
     install: (): Promise<void> => ipcRenderer.invoke('update:install'),
-    onStatusChanged: (callback: (info: unknown) => void): void => {
-      ipcRenderer.on('update:status-changed', (_event, info) => callback(info))
+    onStatusChanged: (callback: (info: unknown) => void): (() => void) => {
+      const listener = (_event: unknown, info: unknown): void => callback(info)
+      ipcRenderer.on('update:status-changed', listener)
+      return () => ipcRenderer.removeListener('update:status-changed', listener)
     },
   },
 
@@ -199,10 +201,14 @@ const api = {
 
   binding: {
     list: (): Promise<unknown[]> => ipcRenderer.invoke('binding:list'),
+    listRules: (): Promise<unknown[]> => ipcRenderer.invoke('binding:list-rules'),
     save: (agentId: string, channel: string, accountId: string): Promise<void> =>
       ipcRenderer.invoke('binding:save', agentId, channel, accountId),
+    saveRule: (rule: unknown): Promise<unknown> => ipcRenderer.invoke('binding:save-rule', rule),
     delete: (channel: string, accountId: string): Promise<void> =>
       ipcRenderer.invoke('binding:delete', channel, accountId),
+    deleteRule: (id: string): Promise<void> => ipcRenderer.invoke('binding:delete-rule', id),
+    reorder: (ids: string[]): Promise<unknown[]> => ipcRenderer.invoke('binding:reorder', ids),
   },
 
   appState: {
