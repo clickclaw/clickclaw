@@ -13,7 +13,7 @@ on:
 
 # 固定 openclaw 版本，升级时同步修改此处
 env:
-  OPENCLAW_PACKAGE_SOURCE: "2026.3.13"
+  OPENCLAW_PACKAGE_SOURCE: "2026.3.28"
   ARTIFACT_RETENTION_DAYS: 7
 
 jobs:
